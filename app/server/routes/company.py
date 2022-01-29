@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Body
-from fastapi.encoders import jsonable_encoder
 
 from ..database import (
     add_company,
@@ -16,6 +15,6 @@ router = APIRouter()
 
 @router.post("/", response_description="Company data added into the database")
 async def add_company_data(company: Company = Body(...)):
-    company = jsonable_encoder(company)
-    new_company = await add_company(company)
+    new_company = await add_company(company.dict(by_alias=True))
+    # return ResponseModel(new_company, "Company added successfully.")
     return ResponseModel(new_company, "Company added successfully.")
