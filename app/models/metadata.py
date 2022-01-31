@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
-from ..utils import PyObjectId
+from utils import PyObjectId
 from bson import ObjectId
 
 # This is the representation of how the data is going to be stored in MongoDB

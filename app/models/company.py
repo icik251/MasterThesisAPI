@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-from ..models.quarter import Quarter
-from ..utils import PyObjectId
+from models.quarter import Quarter
+from utils import PyObjectId
 from bson import ObjectId
 
 # This is the representation of how the data is going to be stored in MongoDB
