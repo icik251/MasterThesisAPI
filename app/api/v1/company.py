@@ -1,18 +1,32 @@
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from crud.company import add_company
+# from crud.company import add_company
 from databases.mongodb.session import get_database
-from models.company import Company, ResponseModel
+from schemas.company import Company, ResponseModel
+from celery_worker import create_company
 
 router = APIRouter()
 
-@router.post("/", response_description="Company data added into the database")
-async def add_company_data(db: AsyncIOMotorClient = Depends(get_database), company: Company = Body(...)):
-    new_company = await add_company(db, company.dict(by_alias=True))
-    # return ResponseModel(new_company, "Company added successfully.")
-    return ResponseModel(new_company, "Company added successfully.")
 
+@router.post("/", response_description="Company data added into the database")
+def add_company_data(company: Company = Body(...)):
+    create_company.delay(company.dict())
+
+    return {"Company added to queue."}
+
+
+# @router.post("/", response_description="Company data added into the database")
+# async def add_company_data(db: AsyncIOMotorClient = Depends(get_database), company: Company = Body(...)):
+#     new_company = await add_company(db, company.dict(by_alias=True))
+
+#     return ResponseModel(new_company, "Company added successfully.")
+
+# @app.post('/order')
+# def add_order(order: models.Order):
+#     # use delay() method to call the celery task
+#     create_order.delay(order.customer_name, order.order_quantity)
+#     return {"message": "Order Received! Thank you for your patience."}
 
 
 # EXAMPLE using sqlalchemy

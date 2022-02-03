@@ -1,36 +1,51 @@
 version: "3"
 services:
-    rabbitmq:
-        image: rabbitmq:latest
-        hostname: rabbitmq
-        ports:
-          - "5672:5672"
-          - "15672:15672"
-        environment:
-          - RABBITMQ_DEFAULT_USER=default
-          - RABBITMQ_DEFAULT_PASS=default
+  rabbitmq:
+    image: rabbitmq:latest
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=rabbitroot
+      - RABBITMQ_DEFAULT_PASS=rabbitroot
 
-      
-    mongodb:
-        image: mongo:latest
-        container_name: mongodb
-        restart: always
-        environment:
-            MONGO_INITDB_ROOT_USERNAME: root
-            MONGO_INITDB_ROOT_PASSWORD: root
-            MONGO_INITDB_DATABASE: SP500_DB
-        ports:
-            - 27017:27017
-        volumes:
-            - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
-            - ./mongodb/data:/data/db
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb # how to show the container name in logs, terminal, etc
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: SP500_DB
+    ports:
+      - 27017:27017
+    volumes:
+      - ./mongodb_docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./mongodb_docker/data:/data/db
 
-    flower:  
-        image: mher/flower
-        environment:
-          - CELERY_BROKER_URL=amqp://default:default@rabbitmq:5672//
-          - FLOWER_PORT=8888
-        ports:  
-          - 8888:8888
+  flower:
+    image: mher/flower
+    environment:
+      - CELERY_BROKER_URL=amqp://rabbitroot:rabbitroot@rabbitmq:5672
+      - FLOWER_PORT=8888
+    ports:
+      - 8888:8888
+    depends_on:
+      - rabbitmq
+  # celery_worker:
+  #   container_name: celery_worker
+  #   build: .
+  #   command:
+  #     - /bin/bash
+  #     - -c
+  #     - |
+  #       cd app
+  #       celery -A celery_worker.celery worker --logfile=../logs/celery.log --loglevel=info
 
-    
+  #   volumes:
+  #     - .:/celery
+  #   environment:
+  #     - CELERY_BROKER_URL=amqp://rabbitroot:rabbitroot@rabbitmq:5672
+  #   depends_on:
+  #     - rabbitmq

@@ -6,6 +6,10 @@ db.createUser(
             {
                 role: 'readWrite',
                 db: 'SP500_DB'
+            },
+            {
+                role: 'readWrite',
+                db: 'celery'
             }
         ]
     }

@@ -9,10 +9,11 @@ from bson import ObjectId
 # This is the representation of how the data is going to be stored in MongoDB
 class Company(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    cik: int = Field(...) # the field thing means it is required
-    name: str = Field(...) 
+    cik: int = Field(...)  # the field thing means it is required
+    name: str = Field(...)
     year: int = Field(..., gt=1990)
     quarters: List[Quarter]
+
     class Config:
         allow_population_by_field_name = True
         arbitrary_types_allowed = True
@@ -23,21 +24,24 @@ class Company(BaseModel):
                 "name": "Nicholas Financial Inc",
                 "year": 2020,
                 "quarters": [
-                                {'q':1, 'metadata': 
-                                    [
-                                        {"type": "10-Q",
-                                         "date": datetime(2020,2,14),
-                                         "uri_txt": "smt/smt/smt.txt",
-                                         "uri_html": "smt/smt/smt.html"
-                                        },
-                                    ]
-                                },
-                            ]
-                        }
-                    }
+                    {
+                        "q": 1,
+                        "info": [
+                            {
+                                "type": "10-Q",
+                                "filing_date": datetime(2020, 2, 14),
+                                "period_of_report": datetime(2020, 10, 2),
+                                "url_htm": "https://www.sec.gov/Archives/edgar/data/1318605/000156459020004475/tsla-10k_20191231.htm",
+                            }
+                        ],
+                    },
+                ],
+            }
+        }
+
 
 class UpdateCompany(BaseModel):
-    cik: Optional[int] # the field thing means it is required
+    cik: Optional[int]  # the field thing means it is required
     name: Optional[str]
     year: Optional[int]
     quarters: Optional[List[Quarter]]
@@ -51,27 +55,29 @@ class UpdateCompany(BaseModel):
                 "name": "Nicholas Financial Inc",
                 "year": 2020,
                 "quarters": [
-                                {'q':1, 'metadata': 
-                                    [
-                                        {"type": "10-Q",
-                                         "date": datetime(2020,2,14),
-                                         "uri_txt": "smt/smt/smt.txt",
-                                         "uri_html": "smt/smt/smt.html"
-                                        },
-                                    ]
-                                },
-                            ]
-                        }
-                    }
+                    {
+                        "q": 1,
+                        "info": [
+                            {
+                                "type": "10-Q",
+                                "filing_date": datetime(2020, 2, 14),
+                                "period_of_report": datetime(2020, 10, 2),
+                                "url_htm": "https://www.sec.gov/Archives/edgar/data/1318605/000156459020004475/tsla-10k_20191231.htm",
+                            }
+                        ],
+                    },
+                ],
+            }
+        }
 
 
-def ResponseModel(data, message):
-    return {
-        "data": Company(**data),
-        "code": 200,
-        "message": message,
-    }
+# def ResponseModel(data, message):
+#     return {
+#         "data": Company(**data),
+#         "code": 200,
+#         "message": message,
+#     }
 
 
-def ErrorResponseModel(error, code, message):
-    return {"error": error, "code": code, "message": message}
+# def ErrorResponseModel(error, code, message):
+#     return {"error": error, "code": code, "message": message}
