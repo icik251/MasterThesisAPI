@@ -21,3 +21,17 @@ def add_company(
     company = db[company_collection].insert_one(company_data)
     new_company = db[company_collection].find_one({"_id": company.inserted_id})
     return new_company
+
+
+def get_company(
+    db: MongoClient,
+    company_data: dict,
+    company_collection: str = settings.COMPANY_COLLECTION,
+) -> dict:
+    return db[company_collection].find_one(
+        {
+            "cik": company_data["cik"],
+            "name": company_data["name"],
+            "year": company_data["year"],
+        }
+    )

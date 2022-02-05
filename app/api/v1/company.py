@@ -13,7 +13,7 @@ router = APIRouter()
 def add_company_data(company: Company = Body(...)):
     create_company.delay(company.dict())
 
-    return {"Company added to queue."}
+    return {"Task added to queue."}
 
 
 # @router.post("/", response_description="Company data added into the database")

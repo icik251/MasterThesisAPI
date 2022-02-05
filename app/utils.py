@@ -21,3 +21,10 @@ class PyObjectId(ObjectId):
 
 def parse_json(data):
     return json.loads(json_util.dumps(data))
+
+def quarter_exist(company_db: dict, company_new: dict):
+    for q_object in company_db['quarters']:
+        if company_new['quarter'] == q_object['quarter']:
+            return True
+        
+    return False

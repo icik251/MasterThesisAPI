@@ -2,6 +2,8 @@ version: "3"
 services:
   rabbitmq:
     image: rabbitmq:latest
+    container_name: rabbitmq # how to show the container name in logs, terminal, etc
+    restart: always
     hostname: rabbitmq
     ports:
       - "5672:5672"
@@ -26,6 +28,8 @@ services:
 
   flower:
     image: mher/flower
+    container_name: flower
+    restart: always
     environment:
       - CELERY_BROKER_URL=amqp://rabbitroot:rabbitroot@rabbitmq:5672
       - FLOWER_PORT=8888

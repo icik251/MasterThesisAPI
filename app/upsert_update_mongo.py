@@ -1,4 +1,10 @@
+"""
+    This file is serving as testing and trying MongoDB commands    
+"""
+
+
 from services.sec_scraper import SECScraper
+from utils import quarter_exist
 from crud.company import add_company, get_company
 
 from databases.mongodb.session import get_database
@@ -8,33 +14,12 @@ from models.company import Company
 from models.info import Info
 from models.quarter import Quarter
 
-import celery
-from celery.signals import celeryd_init
-from celery.utils.log import get_task_logger
-
 from datetime import datetime
 from dotenv import load_dotenv
 import os
 
-load_dotenv("../.env")
-celery_app = celery.Celery(
-    "tasks",
-    backend="mongodb://root:root@localhost:27017/",
-    broker="amqp://rabbitroot:rabbitroot@localhost:5672//",
-)
-celery_app.conf.update(
-    imports=("celery_worker"),
-    mongodb_backend_settings={
-        "database": "celery",
-        "taskmeta_collection": "celery_taskmeta",
-    },
-)
 
-celery_log = get_task_logger(__name__)
-
-
-@celery_app.task(name="create_company")
-def create_company(company_dict: dict):
+def check_update(company_dict):
     connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
 
     db = get_database(db_name=os.getenv("MONGODB_NAME"))
@@ -47,7 +32,8 @@ def create_company(company_dict: dict):
     )
 
     sec_scraper_obj = SECScraper(
-        company_dict, geckodriver_path=os.getenv("GECKODRIVER_PATH")
+        company_dict,
+        geckodriver_path="D:\PythonProjects\MasterThesisAPI\geckodriver.exe",
     )
     sec_scraper_obj.logic()
 
@@ -79,7 +65,6 @@ def create_company(company_dict: dict):
             company_data=company_obj.dict(by_alias=True),
             company_collection=company_collection,
         )
-        celery_log.info("Company added succesfully")
 
     else:
         # add new info if quarter exist and type of filing is new
@@ -97,7 +82,18 @@ def create_company(company_dict: dict):
             {"_id": company_in_db["_id"], "quarters.q": {"$ne": curr_quarter.q}},
             {"$push": {"quarters": curr_quarter.dict()}},
         )
-        celery_log.info("Company info and/or quarter added to company succesfully")
 
     close_mongo_connection()
-    return "Success"
+
+
+check_update(
+    {
+        "cik": 1000045,
+        "name": "Nicholas Financial Inc",
+        "year": 2020,
+        "quarter": 1,
+        "type": "10-Q",
+        "filing_date": "0020-05-02T00:00:00",
+        "html_path": "edgar/data/1000623/0001000623-20-000120-index.html",
+    }
+)

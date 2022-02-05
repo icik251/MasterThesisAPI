@@ -37,6 +37,7 @@ class SECScraper:
             browser.get(os.path.join(self.base_url, self.html_path))
 
         self.soup = BeautifulSoup(browser.page_source, "html.parser")
+        browser.quit()
 
     def extract_htm_url(self) -> None:
         filing_url = self._extract_filing_url()
