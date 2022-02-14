@@ -2,12 +2,16 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from core import settings
 
 
-class MongoSession:
-    client = None
+class AsyncDatabase:
+    client: AsyncIOMotorClient = None
 
 
-db = MongoSession()
+db = AsyncDatabase()
 
 
-def get_database(db_name: str = settings.MONGODB_NAME):
-    return db.client[db_name]
+def get_database_async():
+    return db.client[settings.MONGODB_NAME]
+
+
+def get_database(client, db_name: str = settings.MONGODB_NAME):
+    return client[db_name]

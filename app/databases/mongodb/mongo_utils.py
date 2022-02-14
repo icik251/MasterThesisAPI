@@ -15,8 +15,16 @@ async def close_mongo_connection_async():
 
 
 def connect_to_mongo(mongodb_uri: str = settings.MONGO_DATABASE_URI):
-    db.client = pymongo.MongoClient(mongodb_uri)
+    try:
+        client = pymongo.MongoClient(mongodb_uri, maxPoolSize=300)
+        client.server_info()  # force connection on a request as the
+        # connect=True parameter of MongoClient seems
+        # to be useless here
+    except Exception as e:
+        return None
+
+    return pymongo.MongoClient(mongodb_uri, maxPoolSize=300)
 
 
-def close_mongo_connection():
-    db.client.close()
+def close_mongo_connection(client):
+    client.close()

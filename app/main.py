@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from api.v1 import api_router
 from core import settings
+
 from databases.mongodb.mongo_utils import (
     connect_to_mongo_async,
     close_mongo_connection_async,

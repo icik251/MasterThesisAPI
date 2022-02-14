@@ -11,6 +11,7 @@ class Company(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     cik: int = Field(...)  # the field thing means it is required
     name: str = Field(...)
+    ticker: Optional[str] = None
     year: int = Field(..., gt=1990)
     quarters: List[Quarter]
 
@@ -22,6 +23,7 @@ class Company(BaseModel):
             "example": {
                 "cik": 1000045,
                 "name": "Nicholas Financial Inc",
+                "ticker": "NICK",
                 "year": 2020,
                 "quarters": [
                     {
@@ -43,6 +45,7 @@ class Company(BaseModel):
 class UpdateCompany(BaseModel):
     cik: Optional[int]  # the field thing means it is required
     name: Optional[str]
+    ticker: Optional[str]
     year: Optional[int]
     quarters: Optional[List[Quarter]]
 
@@ -53,6 +56,7 @@ class UpdateCompany(BaseModel):
             "example": {
                 "cik": 1000045,
                 "name": "Nicholas Financial Inc",
+                "ticker": "NICK",
                 "year": 2020,
                 "quarters": [
                     {

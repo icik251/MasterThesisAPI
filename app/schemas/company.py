@@ -1,14 +1,12 @@
 from datetime import datetime
-from operator import mod
 from typing import List, Optional
 from pydantic import BaseModel, Field
-
-from models import company as model_company
 
 # This is what we expect in the POST request for company
 class Company(BaseModel):
     cik: int = Field(...)
     name: str = Field(...)
+    ticker: str = None
     year: int = Field(...)
     quarter: int = Field(...)
     type: str = Field(...)
@@ -20,6 +18,7 @@ class Company(BaseModel):
             "example": {
                 "cik": 1000045,
                 "name": "Nicholas Financial Inc",
+                "ticker": "NICK",
                 "year": 2020,
                 "quarter": 1,
                 "type": "10-Q",
@@ -32,6 +31,7 @@ class Company(BaseModel):
 class UpdateCompany(BaseModel):
     cik: Optional[int]  # the field thing means it is required
     name: Optional[str]
+    ticker: Optional[str]
     year: Optional[int]
     quarter: Optional[int]
     type: Optional[str]
@@ -43,6 +43,7 @@ class UpdateCompany(BaseModel):
             "example": {
                 "cik": 1000045,
                 "name": "Nicholas Financial Inc",
+                "ticker": "NICK",
                 "year": 2020,
                 "quarter": 1,
                 "type": "10-Q",
@@ -53,8 +54,11 @@ class UpdateCompany(BaseModel):
 
 
 def ResponseModel(data, message):
+    # if only 1 company, put it in a list for general response with multiple companies
+    if not isinstance(data, list):
+        data = [data]
     return {
-        "data": model_company.Company(**data),
+        "data": data,
         "code": 200,
         "message": message,
     }

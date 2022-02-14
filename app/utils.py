@@ -19,8 +19,8 @@ class PyObjectId(ObjectId):
         field_schema.update(type="string")
 
 
-def parse_json(data):
-    return json.loads(json_util.dumps(data))
+def parse_model_to_dict(data):
+    return json.loads(data.json())
 
 def quarter_exist(company_db: dict, company_new: dict):
     for q_object in company_db['quarters']:

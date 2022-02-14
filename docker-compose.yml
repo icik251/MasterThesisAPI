@@ -1,7 +1,7 @@
 version: "3"
 services:
   rabbitmq:
-    image: rabbitmq:latest
+    image: rabbitmq:management
     container_name: rabbitmq # how to show the container name in logs, terminal, etc
     restart: always
     hostname: rabbitmq

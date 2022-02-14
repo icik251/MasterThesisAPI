@@ -32,6 +32,7 @@ class SECScraper:
             elem.get_attribute("id")
             for elem in browser.find_elements_by_css_selector("body > div")
         ]:
+            browser.quit()
             raise Exception
         else:
             browser.get(os.path.join(self.base_url, self.html_path))
@@ -83,9 +84,12 @@ class SECScraper:
         for row in table:
             cells = row.find_all("td")
             if cells:
-                for idx, cell_row in enumerate(cells):
-                    if self.type in cell_row.get_text():
-                        return cells[idx + 1].get_text().split()[0]
+                curr_type = cells[3]
+                curr_doc = cells[2]
+                if self.type in curr_type and curr_doc.get_text():
+                    return curr_doc.get_text()
+                if curr_doc.get_text().endswith(".txt"):
+                    return curr_doc.get_text()
 
         return None
 
@@ -99,3 +103,20 @@ class SECScraper:
         self.create_soup()
         self.extract_htm_url()
         self.extract_date_info()
+
+
+# # https://www.sec.gov/Archives/edgar/data/1000232/0001000232-00-000001-index.html
+# sec_scraper = SECScraper(
+#     {
+#         "cik": 123,
+#         "name": "ASD",
+#         "year": 2000,
+#         "quarter": 1,
+#         "type": "10-K",
+#         "filing_date": None,
+#         "html_path": "edgar/data/1000232/0001000232-00-000001-index.html",
+#     },
+#     "D:/PythonProjects/MasterThesisAPI/geckodriver.exe",
+# )
+
+# sec_scraper.logic()
