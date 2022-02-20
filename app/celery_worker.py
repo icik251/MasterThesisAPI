@@ -1,9 +1,7 @@
-import json
-
 from services.sec_scraper import SECScraper
 from crud.company import add_company, get_company
 from crud.metadata import add_metadata
-from crud.stock_price import add_stock_prices
+from crud.stock_price import add_stock_prices, delete_stock_prices
 
 from databases.mongodb.session import get_database
 from databases.mongodb.mongo_utils import connect_to_mongo, close_mongo_connection
@@ -12,6 +10,7 @@ from models.company import Company
 from models.info import Info
 from models.quarter import Quarter
 from models.metadata import Metadata
+from models.stock_price import StockPrice
 
 import celery
 from celery.utils.log import get_task_logger
@@ -21,6 +20,7 @@ import time
 from dotenv import load_dotenv
 import os
 
+import yfinance as yf
 from sec_api import ExtractorApi, XbrlApi
 
 
@@ -50,20 +50,6 @@ class BaseTaskWithRetry(celery.Task):
 
 @celery_app.task(name="create_company", base=BaseTaskWithRetry)
 def create_company(company_dict: dict):
-    client = None
-    while not client:
-        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
-        time.sleep(5)
-
-    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
-    company_collection = os.getenv("COMPANY_COLLECTION")
-
-    company_in_db = get_company(
-        db=db,
-        company_data=company_dict,
-        company_collection=company_collection,
-    )
-
     sec_scraper_obj = SECScraper(
         company_dict, geckodriver_path=os.getenv("GECKODRIVER_PATH")
     )
@@ -97,6 +83,20 @@ def create_company(company_dict: dict):
 
     curr_quarter = Quarter(q=company_dict["quarter"], info=[curr_info.dict()])
 
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    company_collection = os.getenv("COMPANY_COLLECTION")
+
+    company_in_db = get_company(
+        db=db,
+        company_data=company_dict,
+        company_collection=company_collection,
+    )
+
     if not company_in_db:
         # initial creation - if company exists only append new quarter, else create new entry
         company_obj = Company(
@@ -125,13 +125,27 @@ def create_company(company_dict: dict):
                 "quarters.q": {"$eq": curr_quarter.q},
                 "quarters.info.type": {"$ne": curr_info.type},
             },
-            {"$push": {"quarters.$.info": curr_info.dict()}},
+            {
+                "$push": {
+                    "quarters.$.info": {
+                        "$each": [curr_info.dict(by_alias=True)],
+                        "$sort": {"filing_date": 1},
+                    }
+                }
+            },
         )
 
         # push new quarter for company if it does not exist
         db[company_collection].update_one(
             {"_id": company_in_db["_id"], "quarters.q": {"$ne": curr_quarter.q}},
-            {"$push": {"quarters": curr_quarter.dict()}},
+            {
+                "$push": {
+                    "quarters": {
+                        "$each": [curr_quarter.dict(by_alias=True)],
+                        "$sort": {"q": 1},
+                    }
+                }
+            },
         )
         celery_log.info(
             f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Company info and/or quarter added to company succesfully"
@@ -243,7 +257,7 @@ def create_metadata(metadata_dict: dict, curr_company: dict):
 
 
 @celery_app.task(name="create_stock_prices", base=BaseTaskWithRetry)
-def create_stock_prices(cik: int):
+def create_stock_prices(curr_company: dict):
     # connect to DB
     client = None
     while not client:
@@ -253,6 +267,44 @@ def create_stock_prices(cik: int):
     db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
     stock_price_collection = os.getenv("STOCK_PRICE_COLLECTION")
 
+    if not curr_company["ticker"]:
+        return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Ticker does not exist, can't create time-series"
+
+    stock_df = yf.download(curr_company["ticker"], period="max")
+    stock_df.reset_index(level=0, inplace=True)
+
+    if len(stock_df) == 0:
+        return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | No data for company, can't create time-series"
+
+    list_prices = []
+    for timestamp, open, high, low, close, adj_close, volume in zip(
+        stock_df["Date"].values,
+        stock_df["Open"].values,
+        stock_df["High"].values,
+        stock_df["Low"].values,
+        stock_df["Close"].values,
+        stock_df["Adj Close"].values,
+        stock_df["Volume"].values,
+    ):
+        stock_price_obj = StockPrice(
+            metadata={
+                "cik": curr_company["cik"],
+                "ticker": curr_company["ticker"],
+                "ts_type": "adj_close",
+            },
+            timestamp=timestamp,
+            open=round(open, 4),
+            high=round(high, 4),
+            low=round(low, 4),
+            close=round(close, 4),
+            adjusted_close=round(adj_close, 4),
+            volume=volume,
+        )
+        list_prices.append(stock_price_obj.dict(by_alias=True))
+
+    # delete old time-series if exists for company
+    delete_stock_prices(db, curr_company["cik"], stock_price_collection)
+    # add new stock prices
     add_stock_prices(db, list_prices, stock_price_collection)
     close_mongo_connection(client)
-    return f"{cik} | Stock prices added succesfully"
+    return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Stock prices added succesfully"

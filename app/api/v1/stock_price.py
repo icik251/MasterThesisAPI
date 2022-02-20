@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
+from utils import parse_model_to_dict
 from databases.mongodb.session import get_database_async
 from crud.company import get_company_async
 
@@ -10,19 +11,20 @@ router = APIRouter()
 
 
 @router.post("/", response_description="Adding stock prices to database")
-async def add_metadata(
+async def add_stock_prices(
     cik_post: StockPrice = Body(...),
     db: AsyncIOMotorClient = Depends(get_database_async),
 ):
     cik_post_dict = cik_post.dict()
-    curr_company = await get_company_async(db, cik_post_dict["cik"])
+    company_list = await get_company_async(db, cik_post_dict["cik"])
 
-    if curr_company:
-        create_stock_prices.delay(cik_post_dict["cik"])
+    if company_list:
+        # passing the first document in the list for the company as it does not matter
+        create_stock_prices.delay(parse_model_to_dict(company_list[0]))
         return {"message": "Task added to queue."}
     else:
         return ErrorResponseModel(
             "An error occurred.",
             404,
-            "Company doesn't exist, therefore metadata can't be added.",
+            "Company doesn't exist, therefore stock prices can't be added.",
         )

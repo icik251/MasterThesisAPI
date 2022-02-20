@@ -1,7 +1,8 @@
 from typing import Any, Optional
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
-from crud.company import get_company_async
+from crud.company import fix_company
+from crud.company import get_company_async, get_duplicated_companies
 
 # from crud.company import add_company
 from schemas.company import Company, ResponseModel, ErrorResponseModel
@@ -29,6 +30,23 @@ async def get_company_data(
     else:
         return ErrorResponseModel("An error occurred.", 404, "Company doesn't exist.")
 
+
+@router.get(
+    "/",
+    response_description="Get all companies that have duplicated data (race condition when adding them)",
+)
+async def get_duplicated_company_data(
+    db: AsyncIOMotorClient = Depends(get_database_async),
+):
+    return await get_duplicated_companies(db)
+
+@router.get("/{cik}/{year}", response_description="Fix duplicate company and get it")
+async def fix_duplicate_company_data(cik: int,
+    year: int,
+    db: AsyncIOMotorClient = Depends(get_database_async)):
+    
+    inserted_company = await fix_company(db, cik, year)
+    return ResponseModel(inserted_company, "Company fixed and retrieved")
 
 # @router.post("/", response_description="Company data added into the database")
 # async def add_company_data(db: AsyncIOMotorClient = Depends(get_database), company: Company = Body(...)):

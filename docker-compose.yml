@@ -45,7 +45,7 @@ services:
   #     - -c
   #     - |
   #       cd app
-  #       celery -A celery_worker.celery worker --logfile=../logs/celery.log --loglevel=info
+  #       celery -A celery_worker.celery worker --logfile=../logs/celery.log --loglevel=info --max-tasks-per-child=1
 
   #   volumes:
   #     - .:/celery
