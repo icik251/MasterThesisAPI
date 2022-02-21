@@ -86,9 +86,12 @@ class SECScraper:
             if cells:
                 curr_type = cells[3]
                 curr_doc = cells[2]
+
                 if self.type in curr_type and curr_doc.get_text():
                     return curr_doc.get_text().split()[0]
-                if curr_doc.get_text().split()[0].endswith(".txt"):
+                if curr_doc.get_text() and curr_doc.get_text().split()[0].endswith(
+                    ".txt"
+                ):
                     return curr_doc.get_text().split()[0]
 
         return None
@@ -106,17 +109,17 @@ class SECScraper:
 
 
 # edgar/data/1064728/0001064728-21-000008-index.html
-sec_scraper = SECScraper(
-    {
-        "cik": 123,
-        "name": "ASD",
-        "year": 2000,
-        "quarter": 1,
-        "type": "10-K",
-        "filing_date": None,
-        "html_path": "edgar/data/1064728/0001064728-99-000003-index.html",
-    },
-    "D:/PythonProjects/MasterThesisAPI/geckodriver.exe",
-)
+# sec_scraper = SECScraper(
+#     {
+#         "cik": 123,
+#         "name": "ASD",
+#         "year": 2000,
+#         "quarter": 1,
+#         "type": "10-K",
+#         "filing_date": None,
+#         "html_path": "edgar/data/1064728/0001064728-99-000003-index.html",
+#     },
+#     "D:/PythonProjects/MasterThesisAPI/geckodriver.exe",
+# )
 
-sec_scraper.logic()
+# sec_scraper.logic()
