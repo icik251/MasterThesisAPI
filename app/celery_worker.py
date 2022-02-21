@@ -257,7 +257,7 @@ def create_metadata(metadata_dict: dict, curr_company: dict):
 
 
 @celery_app.task(name="create_stock_prices", base=BaseTaskWithRetry)
-def create_stock_prices(curr_company: dict):
+def create_stock_prices(curr_company: dict, start_date: str, end_date: str):
     # connect to DB
     client = None
     while not client:
@@ -270,7 +270,7 @@ def create_stock_prices(curr_company: dict):
     if not curr_company["ticker"]:
         return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Ticker does not exist, can't create time-series"
 
-    stock_df = yf.download(curr_company["ticker"], period="max")
+    stock_df = yf.download(curr_company["ticker"], start=start_date, end=end_date)
     stock_df.reset_index(level=0, inplace=True)
 
     if len(stock_df) == 0:

@@ -12,15 +12,19 @@ router = APIRouter()
 
 @router.post("/", response_description="Adding stock prices to database")
 async def add_stock_prices(
-    cik_post: StockPrice = Body(...),
+    stock_price: StockPrice = Body(...),
     db: AsyncIOMotorClient = Depends(get_database_async),
 ):
-    cik_post_dict = cik_post.dict()
-    company_list = await get_company_async(db, cik_post_dict["cik"])
+    stock_price_dict = stock_price.dict()
+    company_list = await get_company_async(db, stock_price_dict["cik"])
 
     if company_list:
         # passing the first document in the list for the company as it does not matter
-        create_stock_prices.delay(parse_model_to_dict(company_list[0]))
+        create_stock_prices.delay(
+            parse_model_to_dict(company_list[0]),
+            stock_price_dict["start_date"],
+            stock_price_dict["end_date"],
+        )
         return {"message": "Task added to queue."}
     else:
         return ErrorResponseModel(
