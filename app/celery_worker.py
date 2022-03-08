@@ -1,16 +1,19 @@
-from services.sec_scraper import SECScraper
+# from services.sec_scraper import SECScraper
+import copy
+import json
+from services import process_filing
+from services.utils import load_search_terms
+
 from crud.company import add_company, get_company
-from crud.metadata import add_metadata
 from crud.stock_price import add_stock_prices, delete_stock_prices
 
 from databases.mongodb.session import get_database
 from databases.mongodb.mongo_utils import connect_to_mongo, close_mongo_connection
 
 from models.company import Company
-from models.info import Info
 from models.quarter import Quarter
-from models.metadata import Metadata
 from models.stock_price import StockPrice
+from models.metadata import Metadata
 
 import celery
 from celery.utils.log import get_task_logger
@@ -21,7 +24,6 @@ from dotenv import load_dotenv
 import os
 
 import yfinance as yf
-from sec_api import ExtractorApi, XbrlApi
 
 
 load_dotenv("../.env")
@@ -50,42 +52,49 @@ class BaseTaskWithRetry(celery.Task):
 
 @celery_app.task(name="create_company", base=BaseTaskWithRetry)
 def create_company(company_dict: dict):
-    sec_scraper_obj = SECScraper(
-        company_dict, geckodriver_path=os.getenv("GECKODRIVER_PATH")
+    list_of_result = process_filing.logic(
+        company_dict["index_url"],
+        path_to_search_terms=os.getenv("PATH_TO_SEARCH_TERMS_CELERY"),
     )
 
-    sec_scraper_obj.logic()
-    dict_date_info = sec_scraper_obj.get_date_info()
+    if len(list_of_result) > 1:
+        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | List of result contains > 1"
 
-    period_of_report = None
-    if "Period of Report" in dict_date_info:
-        period_of_report = datetime.fromisoformat(dict_date_info["Period of Report"])
-    else:
-        celery_log.info(
-            f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | No period of report"
-        )
-        close_mongo_connection(client)
-        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | No period of report"
-    htm_uri = sec_scraper_obj.get_htm_url()
-    if not htm_uri:
-        celery_log.info(
-            f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | No htm_uri for company"
-        )
-        close_mongo_connection(client)
-        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | No htm_uri for company"
+    dict_of_extracted_text, metadata_to_check = list_of_result[0]
+    # Check if CIKs differ
+    if int(metadata_to_check.sec_cik) != company_dict["cik"]:
+        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Different CIKs {int(metadata_to_check.sec_cik)} and {company_dict.get('cik')}"
+    # Check if filing date differ
+    metadata_datetime = datetime.strptime(
+        metadata_to_check.sec_filing_date, "%Y%m%d"
+    ).isoformat()
+    if (
+        company_dict.get("filing_date", None)
+        and metadata_datetime != company_dict["filing_date"]
+    ):
+        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Different filing dates {metadata_datetime} and {company_dict['filing_date']}"
 
-    curr_info = Info(
-        type=company_dict["type"],
-        filing_date=company_dict["filing_date"],
-        period_of_report=period_of_report,
-        url_htm=htm_uri,
+    curr_metadata = Metadata(
+        type=metadata_to_check.document_type,  # think if adding type from here is the best
+        filing_date=datetime.strptime(metadata_to_check.sec_filing_date, "%Y%m%d"),
+        period_of_report=datetime.strptime(
+            metadata_to_check.sec_period_of_report, "%Y%m%d"
+        ),
+        filing_url=metadata_to_check.sec_url,
+        risk_section=dict_of_extracted_text.get("risk_section", None),
+        mda_section=dict_of_extracted_text.get("mda_section", None),
+        qqd_section=dict_of_extracted_text.get("qqd_section", None),
     )
 
-    curr_quarter = Quarter(q=company_dict["quarter"], info=[curr_info.dict()])
+    curr_quarter = Quarter(
+        q=company_dict["quarter"], metadata=[curr_metadata.dict(by_alias=True)]
+    )
 
     client = None
     while not client:
         client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        if client:
+            break
         time.sleep(5)
 
     db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
@@ -118,17 +127,17 @@ def create_company(company_dict: dict):
         return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Company added successfully"
 
     else:
-        # add new info if quarter exist and type of filing is new
+        # add new metadata if quarter exist and type of filing is new
         db[company_collection].update_one(
             {
                 "_id": company_in_db["_id"],
                 "quarters.q": {"$eq": curr_quarter.q},
-                "quarters.info.type": {"$ne": curr_info.type},
+                "quarters.metadata.type": {"$ne": curr_metadata.type},
             },
             {
                 "$push": {
-                    "quarters.$.info": {
-                        "$each": [curr_info.dict(by_alias=True)],
+                    "quarters.$.metadata": {
+                        "$each": [curr_metadata.dict(by_alias=True)],
                         "$sort": {"filing_date": 1},
                     }
                 }
@@ -148,112 +157,112 @@ def create_company(company_dict: dict):
             },
         )
         celery_log.info(
-            f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Company info and/or quarter added to company succesfully"
+            f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Company metadata and/or quarter added to company succesfully"
         )
         close_mongo_connection(client)
-        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Company info and/or quarter added to company succesfully"
+        return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Company metadata and/or quarter added to company succesfully"
 
 
-@celery_app.task(name="create_metadata", base=BaseTaskWithRetry)
-def create_metadata(metadata_dict: dict, curr_company: dict):
-    curr_info = None
-    for quarter_dict in curr_company["quarters"]:
-        if metadata_dict["quarter"] == quarter_dict["q"]:
-            curr_info = quarter_dict["info"][0]
+# @celery_app.task(name="create_metadata", base=BaseTaskWithRetry)
+# def create_metadata(metadata_dict: dict, curr_company: dict):
+#     curr_info = None
+#     for quarter_dict in curr_company["quarters"]:
+#         if metadata_dict["quarter"] == quarter_dict["q"]:
+#             curr_info = quarter_dict["info"][0]
 
-    if not curr_info:
-        return f"{metadata_dict.get('cik')} - {metadata_dict.get('year')} Q-{metadata_dict.get('quarter')} | Company info does not exist"
+#     if not curr_info:
+#         return f"{metadata_dict.get('cik')} - {metadata_dict.get('year')} Q-{metadata_dict.get('quarter')} | Company info does not exist"
 
-    # connect to DB
-    client = None
-    while not client:
-        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
-        time.sleep(5)
+#     # connect to DB
+#     client = None
+#     while not client:
+#         client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+#         time.sleep(5)
 
-    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
-    metadata_collection = os.getenv("METADATA_COLLECTION")
+#     db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+#     metadata_collection = os.getenv("METADATA_COLLECTION")
 
-    extractorApi = ExtractorApi(os.getenv("SEC_API_KEY"))
-    xbrlApi = XbrlApi(os.getenv("SEC_API_KEY"))
+#     extractorApi = ExtractorApi(os.getenv("SEC_API_KEY"))
+#     xbrlApi = XbrlApi(os.getenv("SEC_API_KEY"))
 
-    mda, risk = None, None
-    # Might change the sections if we cant get a lot of them
-    if "10-Q" in metadata_dict["type"]:
-        mda = extractorApi.get_section(filing_url=curr_info["url_htm"], section="2")
-        risk = extractorApi.get_section(filing_url=curr_info["url_htm"], section="21A")
+#     mda, risk = None, None
+#     # Might change the sections if we cant get a lot of them
+#     if "10-Q" in metadata_dict["type"]:
+#         mda = extractorApi.get_section(filing_url=curr_info["url_htm"], section="2")
+#         risk = extractorApi.get_section(filing_url=curr_info["url_htm"], section="21A")
 
-    elif "10-K" in metadata_dict["type"]:
-        mda = extractorApi.get_section(filing_url=curr_info["url_htm"], section="7")
-        risk = extractorApi.get_section(filing_url=curr_info["url_htm"], section="1A")
+#     elif "10-K" in metadata_dict["type"]:
+#         mda = extractorApi.get_section(filing_url=curr_info["url_htm"], section="7")
+#         risk = extractorApi.get_section(filing_url=curr_info["url_htm"], section="1A")
 
-    if mda == "undefined":
-        mda = None
-    if risk == "undefined":
-        risk = None
+#     if mda == "undefined":
+#         mda = None
+#     if risk == "undefined":
+#         risk = None
 
-    xbrl_json = xbrlApi.xbrl_to_json(htm_url=curr_info["url_htm"])
+#     xbrl_json = xbrlApi.xbrl_to_json(htm_url=curr_info["url_htm"])
 
-    # Set default values
-    assets, liabilities, liabilities_and_stockholders_equity, dict_of_profit_loss = (
-        [],
-        [],
-        [],
-        {},
-    )
-    if not xbrl_json["status"] == 404:
-        balance_sheets = xbrl_json["BalanceSheets"]
-        statements_of_income = xbrl_json["StatementsOfIncome"]
-        statements_of_cash_flows = xbrl_json["StatementsOfCashFlows"]
-        statements_of_shareholders_equity = xbrl_json["StatementsOfShareholdersEquity"]
+#     # Set default values
+#     assets, liabilities, liabilities_and_stockholders_equity, dict_of_profit_loss = (
+#         [],
+#         [],
+#         [],
+#         {},
+#     )
+#     if not xbrl_json["status"] == 404:
+#         balance_sheets = xbrl_json["BalanceSheets"]
+#         statements_of_income = xbrl_json["StatementsOfIncome"]
+#         statements_of_cash_flows = xbrl_json["StatementsOfCashFlows"]
+#         statements_of_shareholders_equity = xbrl_json["StatementsOfShareholdersEquity"]
 
-        assets = balance_sheets.get("Assets", [])
-        liabilities = balance_sheets.get("Liabilities", [])
-        liabilities_and_stockholders_equity = balance_sheets.get(
-            "LiabilitiesAndStockholdersEquity", []
-        )
+#         assets = balance_sheets.get("Assets", [])
+#         liabilities = balance_sheets.get("Liabilities", [])
+#         liabilities_and_stockholders_equity = balance_sheets.get(
+#             "LiabilitiesAndStockholdersEquity", []
+#         )
 
-        dict_of_profit_loss = {}
-        # profitloss
-        dict_of_profit_loss["statements_of_income_pl"] = statements_of_income.get(
-            "ProfitLoss", []
-        )
-        dict_of_profit_loss[
-            "statements_of_cash_flows_pl"
-        ] = statements_of_cash_flows.get("ProfitLoss", [])
-        dict_of_profit_loss[
-            "statements_of_shareholders_equity_pl"
-        ] = statements_of_shareholders_equity.get("ProfitLoss", [])
-        # netincodeloss
-        dict_of_profit_loss["statements_of_income_ni"] = statements_of_income.get(
-            "NetIncomeLoss", []
-        )
-        dict_of_profit_loss[
-            "statements_of_cash_flows_ni"
-        ] = statements_of_cash_flows.get("NetIncomeLoss", [])
-        dict_of_profit_loss[
-            "statements_of_shareholders_equity_ni"
-        ] = statements_of_shareholders_equity.get("NetIncomeLoss", [])
-    # dict_of_revenues = {}
-    # dict_of_revenues['statements_of_income'] = statements_of_income.get("Revenues", None)
-    # dict_of_revenues['statements_of_cash_flows'] = statements_of_cash_flows.get("Revenues", None)
-    # dict_of_revenues['statements_of_shareholders_equity'] = statements_of_shareholders_equity.get("Revenues", None)
+#         dict_of_profit_loss = {}
+#         # profitloss
+#         dict_of_profit_loss["statements_of_income_pl"] = statements_of_income.get(
+#             "ProfitLoss", []
+#         )
+#         dict_of_profit_loss[
+#             "statements_of_cash_flows_pl"
+#         ] = statements_of_cash_flows.get("ProfitLoss", [])
+#         dict_of_profit_loss[
+#             "statements_of_shareholders_equity_pl"
+#         ] = statements_of_shareholders_equity.get("ProfitLoss", [])
+#         # netincodeloss
+#         dict_of_profit_loss["statements_of_income_ni"] = statements_of_income.get(
+#             "NetIncomeLoss", []
+#         )
+#         dict_of_profit_loss[
+#             "statements_of_cash_flows_ni"
+#         ] = statements_of_cash_flows.get("NetIncomeLoss", [])
+#         dict_of_profit_loss[
+#             "statements_of_shareholders_equity_ni"
+#         ] = statements_of_shareholders_equity.get("NetIncomeLoss", [])
+#     # dict_of_revenues = {}
+#     # dict_of_revenues['statements_of_income'] = statements_of_income.get("Revenues", None)
+#     # dict_of_revenues['statements_of_cash_flows'] = statements_of_cash_flows.get("Revenues", None)
+#     # dict_of_revenues['statements_of_shareholders_equity'] = statements_of_shareholders_equity.get("Revenues", None)
 
-    curr_metadata = Metadata(
-        cik=metadata_dict["cik"],
-        year=metadata_dict["year"],
-        quarter=metadata_dict["quarter"],
-        type=metadata_dict["type"],
-        mda_section=mda,
-        risk_section=risk,
-        assets=assets,
-        liabilities=liabilities,
-        liabilities_and_stockholders_equity=liabilities_and_stockholders_equity,
-        profit_loss=dict_of_profit_loss,
-    )
+#     curr_metadata = Metadata(
+#         cik=metadata_dict["cik"],
+#         year=metadata_dict["year"],
+#         quarter=metadata_dict["quarter"],
+#         type=metadata_dict["type"],
+#         mda_section=mda,
+#         risk_section=risk,
+#         assets=assets,
+#         liabilities=liabilities,
+#         liabilities_and_stockholders_equity=liabilities_and_stockholders_equity,
+#         profit_loss=dict_of_profit_loss,
+#     )
 
-    add_metadata(db, curr_metadata.dict(by_alias=True), metadata_collection)
-    close_mongo_connection(client)
-    return f"{metadata_dict.get('cik')} - {metadata_dict.get('year')} Q-{metadata_dict.get('quarter')} | Metadata added succesfully"
+#     add_metadata(db, curr_metadata.dict(by_alias=True), metadata_collection)
+#     close_mongo_connection(client)
+#     return f"{metadata_dict.get('cik')} - {metadata_dict.get('year')} Q-{metadata_dict.get('quarter')} | Metadata added succesfully"
 
 
 @celery_app.task(name="create_stock_prices", base=BaseTaskWithRetry)

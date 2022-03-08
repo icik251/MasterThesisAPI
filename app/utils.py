@@ -2,6 +2,8 @@ import json
 from bson import json_util
 from bson.objectid import ObjectId
 
+import json
+
 
 class PyObjectId(ObjectId):
     @classmethod
@@ -22,9 +24,10 @@ class PyObjectId(ObjectId):
 def parse_model_to_dict(data):
     return json.loads(data.json())
 
+
 def quarter_exist(company_db: dict, company_new: dict):
-    for q_object in company_db['quarters']:
-        if company_new['quarter'] == q_object['quarter']:
+    for q_object in company_db["quarters"]:
+        if company_new["quarter"] == q_object["quarter"]:
             return True
-        
+
     return False

@@ -72,9 +72,9 @@ async def fix_company(
             q_processed = False
             for idx, res_quarter in enumerate(resulted_company["quarters"]):
                 if quarter["q"] == res_quarter["q"]:
-                    # Add new object in info
-                    for info in quarter["info"]:
-                        resulted_company["quarters"][idx]["info"].append(info)
+                    # Add new object in metadata
+                    for metadata in quarter["metadata"]:
+                        resulted_company["quarters"][idx]["metadata"].append(metadata)
                     q_processed = True
 
             if not q_processed:

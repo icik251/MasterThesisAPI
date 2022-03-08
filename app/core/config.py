@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     MONGODB_NAME: str = os.getenv("MONGODB_NAME")
 
     GECKODRIVER_PATH: str = os.getenv("GECKODRIVER_PATH")
+    PATH_TO_SEARCH_TERMS: str = os.getenv("PATH_TO_SEARCH_TERMS")
     # collections for mongo
     COMPANY_COLLECTION: str = os.getenv("COMPANY_COLLECTION")
     METADATA_COLLECTION: str = os.getenv("METADATA_COLLECTION")

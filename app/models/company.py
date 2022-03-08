@@ -19,27 +19,6 @@ class Company(BaseModel):
         allow_population_by_field_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
-        schema_extra = {
-            "example": {
-                "cik": 1000045,
-                "name": "Nicholas Financial Inc",
-                "ticker": "NICK",
-                "year": 2020,
-                "quarters": [
-                    {
-                        "q": 1,
-                        "info": [
-                            {
-                                "type": "10-Q",
-                                "filing_date": datetime(2020, 2, 14),
-                                "period_of_report": datetime(2020, 10, 2),
-                                "url_htm": "https://www.sec.gov/Archives/edgar/data/1318605/000156459020004475/tsla-10k_20191231.htm",
-                            }
-                        ],
-                    },
-                ],
-            }
-        }
 
 
 class UpdateCompany(BaseModel):
@@ -52,27 +31,6 @@ class UpdateCompany(BaseModel):
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
-        schema_extra = {
-            "example": {
-                "cik": 1000045,
-                "name": "Nicholas Financial Inc",
-                "ticker": "NICK",
-                "year": 2020,
-                "quarters": [
-                    {
-                        "q": 1,
-                        "info": [
-                            {
-                                "type": "10-Q",
-                                "filing_date": datetime(2020, 2, 14),
-                                "period_of_report": datetime(2020, 10, 2),
-                                "url_htm": "https://www.sec.gov/Archives/edgar/data/1318605/000156459020004475/tsla-10k_20191231.htm",
-                            }
-                        ],
-                    },
-                ],
-            }
-        }
 
 
 # def ResponseModel(data, message):

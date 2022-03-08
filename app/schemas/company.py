@@ -9,9 +9,9 @@ class Company(BaseModel):
     ticker: str = None
     year: int = Field(...)
     quarter: int = Field(...)
-    type: str = Field(...)
-    filing_date: datetime = Field(...)
-    html_path: str = Field(...)
+    type: Optional[str]
+    filing_date: Optional[datetime]
+    index_url: str = Field(...)
 
     class Config:
         schema_extra = {
@@ -23,7 +23,7 @@ class Company(BaseModel):
                 "quarter": 1,
                 "type": "10-Q",
                 "filing_date": datetime(20, 5, 2),
-                "html_path": "edgar/data/1000045/0001193125-12-047920-index.html",
+                "index_url": "https://www.sec.gov/Archives/edgar/data/1000045/0001193125-12-047920-index.html",
             }
         }
 
@@ -36,7 +36,7 @@ class UpdateCompany(BaseModel):
     quarter: Optional[int]
     type: Optional[str]
     filing_date: Optional[datetime]
-    html_path: Optional[str]
+    index_url: Optional[str]
 
     class Config:
         schema_extra = {
@@ -48,7 +48,7 @@ class UpdateCompany(BaseModel):
                 "quarter": 1,
                 "type": "10-Q",
                 "filing_date": datetime(20, 5, 2),
-                "html_path": "edgar/data/1000045/0001193125-12-047920-index.html",
+                "index_url": "https://www.sec.gov/Archives/edgar/data/1000045/0001193125-12-047920-index.html",
             }
         }
 
