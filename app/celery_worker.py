@@ -2,7 +2,7 @@
 import copy
 import json
 from services import process_filing
-from services.utils import load_search_terms
+from services.utils import load_search_terms, requests_get
 
 from crud.company import add_company, get_company
 from crud.stock_price import add_stock_prices, delete_stock_prices
@@ -18,7 +18,7 @@ from models.metadata import Metadata
 import celery
 from celery.utils.log import get_task_logger
 
-from datetime import datetime
+import datetime
 import time
 from dotenv import load_dotenv
 import os
@@ -65,7 +65,7 @@ def create_company(company_dict: dict):
     if int(metadata_to_check.sec_cik) != company_dict["cik"]:
         return f"{company_dict.get('cik')} - {company_dict.get('year')} Q-{company_dict.get('quarter')} | Different CIKs {int(metadata_to_check.sec_cik)} and {company_dict.get('cik')}"
     # Check if filing date differ
-    metadata_datetime = datetime.strptime(
+    metadata_datetime = datetime.datetime.strptime(
         metadata_to_check.sec_filing_date, "%Y%m%d"
     ).isoformat()
     if (
@@ -76,8 +76,10 @@ def create_company(company_dict: dict):
 
     curr_metadata = Metadata(
         type=metadata_to_check.document_type,  # think if adding type from here is the best
-        filing_date=datetime.strptime(metadata_to_check.sec_filing_date, "%Y%m%d"),
-        period_of_report=datetime.strptime(
+        filing_date=datetime.datetime.strptime(
+            metadata_to_check.sec_filing_date, "%Y%m%d"
+        ),
+        period_of_report=datetime.datetime.strptime(
             metadata_to_check.sec_period_of_report, "%Y%m%d"
         ),
         filing_url=metadata_to_check.sec_url,
@@ -266,7 +268,7 @@ def create_company(company_dict: dict):
 
 
 @celery_app.task(name="create_stock_prices", base=BaseTaskWithRetry)
-def create_stock_prices(curr_company: dict, start_date: str, end_date: str):
+def create_stock_prices(curr_company: dict, start_date: str):
     # connect to DB
     client = None
     while not client:
@@ -279,35 +281,51 @@ def create_stock_prices(curr_company: dict, start_date: str, end_date: str):
     if not curr_company["ticker"]:
         return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Ticker does not exist, can't create time-series"
 
-    stock_df = yf.download(curr_company["ticker"], start=start_date, end=end_date)
-    stock_df.reset_index(level=0, inplace=True)
+    r = requests_get(
+        f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={curr_company['ticker']}&outputsize=full&apikey={os.getenv('AV_API_KEY')}"
+    )
 
-    if len(stock_df) == 0:
+    while r.status_code != 200:
+        print(f"Status code: {r.status_code}")
+        time.sleep(60)
+        r = requests_get(
+            f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={curr_company['ticker']}&outputsize=full&apikey={os.getenv('AV_API_KEY')}"
+        )
+
+    data = r.json()
+    stock_prices_dict = data.get("Time Series (Daily)", None)
+    if not stock_prices_dict or len(stock_prices_dict) == 0:
         return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | No data for company, can't create time-series"
 
+    # Process start date logic
+    list_of_dates = list(stock_prices_dict.keys())
+
+    while start_date not in list_of_dates:
+        start_datetime = datetime.datetime.fromisoformat(start_date)
+        start_datetime += datetime.timedelta(days=1)
+        start_date = start_datetime.strftime("%Y-%m-%d")
+
+    idx = list_of_dates.index(start_date)
+    list_of_dates = list_of_dates[: idx + 1]
+
     list_prices = []
-    for timestamp, open, high, low, close, adj_close, volume in zip(
-        stock_df["Date"].values,
-        stock_df["Open"].values,
-        stock_df["High"].values,
-        stock_df["Low"].values,
-        stock_df["Close"].values,
-        stock_df["Adj Close"].values,
-        stock_df["Volume"].values,
-    ):
+    for date in sorted(list_of_dates):
+        curr_data_dict = stock_prices_dict[date]
         stock_price_obj = StockPrice(
             metadata={
                 "cik": curr_company["cik"],
                 "ticker": curr_company["ticker"],
                 "ts_type": "adj_close",
             },
-            timestamp=timestamp,
-            open=round(open, 4),
-            high=round(high, 4),
-            low=round(low, 4),
-            close=round(close, 4),
-            adjusted_close=round(adj_close, 4),
-            volume=volume,
+            timestamp=datetime.datetime.fromisoformat(date),
+            open=curr_data_dict["1. open"],
+            high=curr_data_dict["2. high"],
+            low=curr_data_dict["3. low"],
+            close=curr_data_dict["4. close"],
+            adjusted_close=curr_data_dict["5. adjusted close"],
+            volume=curr_data_dict["6. volume"],
+            divident_amount=curr_data_dict["7. dividend amount"],
+            split_coeff=curr_data_dict["8. split coefficient"],
         )
         list_prices.append(stock_price_obj.dict(by_alias=True))
 

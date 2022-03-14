@@ -23,7 +23,6 @@ async def add_stock_prices(
         create_stock_prices.delay(
             parse_model_to_dict(company_list[0]),
             stock_price_dict["start_date"],
-            stock_price_dict["end_date"],
         )
         return {"message": "Task added to queue."}
     else:

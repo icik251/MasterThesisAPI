@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     METADATA_COLLECTION: str = os.getenv("METADATA_COLLECTION")
     STOCK_PRICE_COLLECTION: str = os.getenv("STOCK_PRICE_COLLECTION")
 
-    SEC_API_KEY: str = os.getenv("SEC_API_KEY")
+    AV_API_KEY: str = os.getenv("AV_API_KEY")
 
     class Config:
         pass

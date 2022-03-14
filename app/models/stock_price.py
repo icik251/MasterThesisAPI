@@ -15,6 +15,8 @@ class StockPrice(BaseModel):
     close: float = Field(...)
     adjusted_close: float = Field(...)
     volume: float = Field(...)
+    divident_amount: float = Field(...)
+    split_coeff: float = Field(...)
 
     class Config:
         allow_population_by_field_name = True

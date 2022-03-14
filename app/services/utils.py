@@ -58,9 +58,9 @@ def requests_get(url, params=None):
             success = True
             # facility to add a pause to respect SEC EDGAR traffic limit
             # https://www.sec.gov/privacy.htm#security
-            time.sleep(5)
+            # time.sleep(60)
         except requests.exceptions.RequestException as e:
-            wait = (retries ^ 3) * 20 + random.randint(1, 5)
+            wait = 60
             # logger.warning(e)
             # logger.info('URL: %s' % url)
             # logger.info(
