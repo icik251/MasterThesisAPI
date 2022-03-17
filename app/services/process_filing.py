@@ -80,6 +80,49 @@ def logic(index_url: str, path_to_search_terms: str = None):
             doc_metadata.document_type = document_type
             doc_metadata.document_group = document_group
 
+            # Try to find accelerated between tr
+            accelerated_search = re.search(
+                r"<tr>.*accelerated.*</tr>", doc_text, re.DOTALL
+            )
+            current_match = None
+            if accelerated_search:
+                match_str = (
+                    accelerated_search.group(0)
+                    .lower()
+                    .replace("<", " ")
+                    .replace(">", " ")
+                    .replace(";", " ")
+                    .replace("&", " ")
+                    .replace("_", " ")
+                    .replace("[", " ")
+                    .replace("]", " ")
+                )
+                list_of_symbols = ["#9746", "#9745", "#x2611", "#x2612", "x"]
+                list_of_splitted_match = match_str.split()
+                in_sequence = False
+                for idx, substring in enumerate(list_of_splitted_match):
+                    if in_sequence and substring in list_of_symbols:
+                        break
+
+                    if (
+                        substring == "accelerated"
+                        and list_of_splitted_match[idx - 1] == "large"
+                    ):
+                        in_sequence = True
+                        current_match = "large_accelerated_filer"
+                    elif substring == "accelerated":
+                        in_sequence = True
+                        current_match = "accelerated_filer"
+                    elif substring == "non-accelerated":
+                        in_sequence = True
+                        current_match = "non_accelerated_filer"
+                    elif (
+                        substring == "smaller"
+                        and list_of_splitted_match[idx + 1] == "reporting"
+                    ):
+                        in_sequence = True
+                        current_match = "smaller_reporting_company"
+
             # search for a <html>...</html> block in the DOCUMENT
             html_search = re.search(r"<(?i)html>.*?</(?i)html>", doc_text, re.DOTALL)
             xbrl_search = re.search(r"<(?i)xbrl>.*?</(?i)xbrl>", doc_text, re.DOTALL)
@@ -128,4 +171,4 @@ def logic(index_url: str, path_to_search_terms: str = None):
                     skip_existing_excerpts=False,
                 )
             )
-    return list_of_result
+    return list_of_result, current_match
