@@ -16,15 +16,12 @@ class StockPrice(BaseModel):
         }
 
 
-# def ResponseModel(data, message):
-#     # if only 1 company, put it in a list for general response with multiple companies
-#     if not isinstance(data, list):
-#         data = [data]
-#     return {
-#         "data": data,
-#         "code": 200,
-#         "message": message,
-#     }
+def ResponseModel(data, message):
+    return {
+        "data": data,
+        "code": 200,
+        "message": message,
+    }
 
 
 def ErrorResponseModel(error, code, message):

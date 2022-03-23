@@ -23,6 +23,8 @@ import time
 from dotenv import load_dotenv
 import os
 
+import cpi
+
 import yfinance as yf
 
 
@@ -229,8 +231,78 @@ def create_stock_prices(curr_company: dict, start_date: str):
         list_prices.append(stock_price_obj.dict(by_alias=True))
 
     # delete old time-series if exists for company
-    delete_stock_prices(db, curr_company["cik"], stock_price_collection)
+    delete_stock_prices(db, curr_company["cik"], "adj_close", stock_price_collection)
     # add new stock prices
     add_stock_prices(db, list_prices, stock_price_collection)
     close_mongo_connection(client)
     return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Stock prices added succesfully"
+
+
+@celery_app.task(name="create_adj_inflation_stock_prices", base=BaseTaskWithRetry)
+def create_adj_inflation_stock_prices(stock_prices_list: list):
+    # Logic here
+    init_stock_price = None
+    list_of_adj_inflation = []
+    for idx, curr_stock_price in enumerate(stock_prices_list):
+        if idx == 0:
+            init_stock_price = curr_stock_price
+
+        try:
+            stock_price_obj = StockPrice(
+                metadata={
+                    "cik": curr_stock_price["metadata"]["cik"],
+                    "ticker": curr_stock_price["metadata"]["ticker"],
+                    "ts_type": "adj_inflation",
+                },
+                timestamp=datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                open=cpi.inflate(
+                    curr_stock_price["open"],
+                    datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                    to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                ),
+                high=cpi.inflate(
+                    curr_stock_price["high"],
+                    datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                    to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                ),
+                low=cpi.inflate(
+                    curr_stock_price["low"],
+                    datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                    to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                ),
+                close=cpi.inflate(
+                    curr_stock_price["close"],
+                    datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                    to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                ),
+                adjusted_close=cpi.inflate(
+                    curr_stock_price["adjusted_close"],
+                    datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                    to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                ),
+                volume=curr_stock_price["volume"],
+                divident_amount=curr_stock_price["divident_amount"],
+                split_coeff=curr_stock_price["split_coeff"],
+            )
+            
+            list_of_adj_inflation.append(stock_price_obj.dict(by_alias=True))
+        except Exception as e:
+            pass
+
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    stock_price_collection = os.getenv("STOCK_PRICE_COLLECTION")
+
+    # delete old time-series if exists for company
+    delete_stock_prices(
+        db, curr_stock_price["metadata"]["cik"], "adj_inflation", stock_price_collection
+    )
+    # add new stock prices
+    add_stock_prices(db, list_of_adj_inflation, stock_price_collection)
+    close_mongo_connection(client)
+    return f"{curr_stock_price['metadata']['cik']} ticker is {curr_stock_price['metadata']['ticker']} | Adjusted to inflation tock prices added succesfully"
