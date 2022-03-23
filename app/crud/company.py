@@ -32,6 +32,23 @@ async def get_company_async(
         async for company in db[company_collection].find({"cik": cik}):
             company_list.append(model_company.Company(**company))
         return company_list
+    
+async def get_all_companies_async(db: AsyncIOMotorClient, company_collection: str = settings.COMPANY_COLLECTION):
+    company_list = []
+    async for company in db[company_collection].find({}):
+        company_list.append(model_company.Company(**company))
+    return company_list
+    
+
+async def update_company(cik, year, updated_company, db: AsyncIOMotorClient, company_collection: str = settings.COMPANY_COLLECTION):
+    # Delete old
+    _ = await db[company_collection].delete_many({"cik": cik, "year": year})
+    # Add new
+    new_company = await db[company_collection].insert_one(updated_company)
+    inserted_company = await db[company_collection].find_one(
+        {"_id": new_company.inserted_id}
+    )
+    return model_company.Company(**inserted_company)
 
 
 async def get_duplicated_companies(

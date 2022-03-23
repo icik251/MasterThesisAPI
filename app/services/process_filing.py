@@ -80,15 +80,10 @@ def logic(index_url: str, path_to_search_terms: str = None):
             doc_metadata.document_type = document_type
             doc_metadata.document_group = document_group
 
-            # Try to find accelerated between tr
-            accelerated_search = re.search(
-                r"<tr>.*accelerated.*</tr>", doc_text, re.DOTALL
-            )
             current_match = None
-            if accelerated_search:
+            if doc_text:
                 match_str = (
-                    accelerated_search.group(0)
-                    .lower()
+                    doc_text.lower()
                     .replace("<", " ")
                     .replace(">", " ")
                     .replace(";", " ")
@@ -96,32 +91,83 @@ def logic(index_url: str, path_to_search_terms: str = None):
                     .replace("_", " ")
                     .replace("[", " ")
                     .replace("]", " ")
+                    .replace("nbsp", " ")
+                    .replace("#160", " ")
                 )
-                list_of_symbols = ["#9746", "#9745", "#x2611", "#x2612", "x"]
-                list_of_splitted_match = match_str.split()
+                list_of_symbols = [
+                    "#9746",
+                    "#9745",
+                    "#x2611",
+                    "#x2612",
+                    "#8999",
+                    "#254",
+                    "#253",
+                    "#x2713",
+                    "#10003",
+                    "q",
+                    "x",
+                ]
+                non_numeric_symbol = "/ix:nonnumeric"
+                list_to_end_seq = ["#9744"]
+                list_of_splitted_match = match_str.lower().split()
                 in_sequence = False
+
+                last_substring_match = None
+                curr_nonnumeric_match = False
                 for idx, substring in enumerate(list_of_splitted_match):
+                    if in_sequence and substring in list_to_end_seq:
+                        in_sequence = False
+                        curr_nonnumeric_match = False
+                        current_match = None
+                        
+
                     if in_sequence and substring in list_of_symbols:
                         break
+                    
+                    elif in_sequence and substring == non_numeric_symbol:
+                        curr_nonnumeric_match = True
 
                     if (
                         substring == "accelerated"
                         and list_of_splitted_match[idx - 1] == "large"
-                    ):
+                    ):  
+                        # if there is already a valid match when we go to the next type
+                        if curr_nonnumeric_match:
+                            break
                         in_sequence = True
                         current_match = "large_accelerated_filer"
-                    elif substring == "accelerated":
+                        last_substring_match = substring
+                    elif substring == "accelerated" and last_substring_match != "non":
+                        # if there is already a valid match when we go to the next type
+                        if curr_nonnumeric_match:
+                            break
                         in_sequence = True
                         current_match = "accelerated_filer"
+                        last_substring_match = substring
                     elif substring == "non-accelerated":
+                        # if there is already a valid match when we go to the next type
+                        if curr_nonnumeric_match:
+                            break
                         in_sequence = True
                         current_match = "non_accelerated_filer"
+                        last_substring_match = substring
+                    elif substring == "non":
+                        # if there is already a valid match when we go to the next type
+                        if curr_nonnumeric_match:
+                            break
+                        in_sequence = True
+                        current_match = "non_accelerated_filer"
+                        last_substring_match = substring
                     elif (
                         substring == "smaller"
                         and list_of_splitted_match[idx + 1] == "reporting"
                     ):
+                        # if there is already a valid match when we go to the next type
+                        if curr_nonnumeric_match:
+                            break
                         in_sequence = True
                         current_match = "smaller_reporting_company"
+                        last_substring_match = substring
 
             # search for a <html>...</html> block in the DOCUMENT
             html_search = re.search(r"<(?i)html>.*?</(?i)html>", doc_text, re.DOTALL)

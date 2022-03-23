@@ -135,7 +135,7 @@ def create_company(company_dict: dict):
             {
                 "_id": company_in_db["_id"],
                 "quarters.q": {"$eq": curr_quarter.q},
-                "quarters.metadata.type": {"$ne": curr_metadata.type},
+                # "quarters.metadata.type": {"$ne": curr_metadata.type},
             },
             {
                 "$push": {
