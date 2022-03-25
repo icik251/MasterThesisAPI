@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 from utils import parse_model_to_dict
@@ -62,3 +63,37 @@ async def add_adj_inflation_stock_prices(
             404,
             "Company doesn't exist, therefore stock prices can't be added.",
         )
+
+
+@router.get(
+    "/inflation/{cik}", response_description="Get adjusted for inflation stock prices"
+)
+async def get_adj_inflation_stock_prices_api(
+    cik: int, db: AsyncIOMotorClient = Depends(get_database_async)
+):
+
+    stock_prices_list = await get_stock_prices(db=db, cik=cik, ts_type="adj_inflation")
+    if not stock_prices_list:
+        return ErrorResponseModel(
+            "An error occurred.",
+            404,
+            "Stock prices adjusted for inflation not found",
+        )
+    return ResponseModel(
+        stock_prices_list, "Stock prices adjusted for inflation retrieved successfully."
+    )
+
+
+@router.get("/{cik}", response_description="Get stock prices")
+async def get_stock_prices_api(
+    cik: int, db: AsyncIOMotorClient = Depends(get_database_async)
+):
+
+    stock_prices_list = await get_stock_prices(db=db, cik=cik, ts_type="adj_close")
+    if not stock_prices_list:
+        return ErrorResponseModel(
+            "An error occurred.",
+            404,
+            "Stock prices not found",
+        )
+    return ResponseModel(stock_prices_list, "Stock prices retrieved successfully.")

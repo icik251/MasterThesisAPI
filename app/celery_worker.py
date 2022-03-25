@@ -23,10 +23,7 @@ import time
 from dotenv import load_dotenv
 import os
 
-import cpi
-
-import yfinance as yf
-
+# import cpi
 
 load_dotenv("../.env")
 celery_app = celery.Celery(
@@ -254,7 +251,9 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
                     "ticker": curr_stock_price["metadata"]["ticker"],
                     "ts_type": "adj_inflation",
                 },
-                timestamp=datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
+                timestamp=datetime.datetime.fromisoformat(
+                    curr_stock_price["timestamp"]
+                ),
                 open=cpi.inflate(
                     curr_stock_price["open"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
@@ -284,7 +283,7 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
                 divident_amount=curr_stock_price["divident_amount"],
                 split_coeff=curr_stock_price["split_coeff"],
             )
-            
+
             list_of_adj_inflation.append(stock_price_obj.dict(by_alias=True))
         except Exception as e:
             pass
