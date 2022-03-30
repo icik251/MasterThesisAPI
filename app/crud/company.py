@@ -7,15 +7,6 @@ from core import settings
 from models import company as model_company
 from utils import parse_model_to_dict
 
-# async def add_company_async(
-#     db: AsyncIOMotorClient,
-#     company_data: dict,
-#     company_collection: str = settings.COMPANY_COLLECTION,
-# ) -> dict:
-#     company = await db[company_collection].insert_one(company_data)
-#     new_company = await db[company_collection].find_one({"_id": company.inserted_id})
-#     return new_company
-
 
 async def get_company_async(
     db: AsyncIOMotorClient,
@@ -29,18 +20,27 @@ async def get_company_async(
             return model_company.Company(**company)
     else:
         company_list = []
-        async for company in db[company_collection].find({"cik": cik}):
+        async for company in db[company_collection].find({"cik": cik}).sort("year", 1):
             company_list.append(model_company.Company(**company))
         return company_list
-    
-async def get_all_companies_async(db: AsyncIOMotorClient, company_collection: str = settings.COMPANY_COLLECTION):
+
+
+async def get_all_companies_async(
+    db: AsyncIOMotorClient, company_collection: str = settings.COMPANY_COLLECTION
+):
     company_list = []
     async for company in db[company_collection].find({}):
         company_list.append(model_company.Company(**company))
     return company_list
-    
 
-async def update_company(cik, year, updated_company, db: AsyncIOMotorClient, company_collection: str = settings.COMPANY_COLLECTION):
+
+async def update_company(
+    cik,
+    year,
+    updated_company,
+    db: AsyncIOMotorClient,
+    company_collection: str = settings.COMPANY_COLLECTION,
+):
     # Delete old
     _ = await db[company_collection].delete_many({"cik": cik, "year": year})
     # Add new

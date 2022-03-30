@@ -23,8 +23,6 @@ import time
 from dotenv import load_dotenv
 import os
 
-# import cpi
-
 load_dotenv("../.env")
 celery_app = celery.Celery(
     "tasks",
@@ -235,6 +233,8 @@ def create_stock_prices(curr_company: dict, start_date: str):
     return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Stock prices added succesfully"
 
 
+# Comment out if not using the adj inflation creation endpoint to preserve time on initial loading of the API
+# import cpi
 @celery_app.task(name="create_adj_inflation_stock_prices", base=BaseTaskWithRetry)
 def create_adj_inflation_stock_prices(stock_prices_list: list):
     # Logic here
@@ -258,26 +258,31 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
                     curr_stock_price["open"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                    item="Purchasing power of the consumer dollar",
                 ),
                 high=cpi.inflate(
                     curr_stock_price["high"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                    item="Purchasing power of the consumer dollar",
                 ),
                 low=cpi.inflate(
                     curr_stock_price["low"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                    item="Purchasing power of the consumer dollar",
                 ),
                 close=cpi.inflate(
                     curr_stock_price["close"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                    item="Purchasing power of the consumer dollar",
                 ),
                 adjusted_close=cpi.inflate(
                     curr_stock_price["adjusted_close"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
+                    item="Purchasing power of the consumer dollar",
                 ),
                 volume=curr_stock_price["volume"],
                 divident_amount=curr_stock_price["divident_amount"],
@@ -304,4 +309,4 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
     # add new stock prices
     add_stock_prices(db, list_of_adj_inflation, stock_price_collection)
     close_mongo_connection(client)
-    return f"{curr_stock_price['metadata']['cik']} ticker is {curr_stock_price['metadata']['ticker']} | Adjusted to inflation tock prices added succesfully"
+    return f"{curr_stock_price['metadata']['cik']} ticker is {curr_stock_price['metadata']['ticker']} | Adjusted to inflation stock prices added succesfully"
