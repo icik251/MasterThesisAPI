@@ -1,11 +1,13 @@
 # from services.sec_scraper import SECScraper
 import copy
 import json
-from services import process_filing
+import traceback
+from services import process_filing, company_input_data_handler
 from services.utils import load_search_terms, requests_get
 
 from crud.company import add_company, get_company
 from crud.stock_price import add_stock_prices, delete_stock_prices
+from crud.input_data import add_input_data, delete_input_data
 
 from databases.mongodb.session import get_database
 from databases.mongodb.mongo_utils import connect_to_mongo, close_mongo_connection
@@ -14,6 +16,7 @@ from models.company import Company
 from models.quarter import Quarter
 from models.stock_price import StockPrice
 from models.metadata import Metadata
+from models.input_data import InputData
 
 import celery
 from celery.utils.log import get_task_logger
@@ -39,6 +42,8 @@ celery_app.conf.update(
 )
 
 celery_log = get_task_logger(__name__)
+
+import pandas as pd
 
 
 class BaseTaskWithRetry(celery.Task):
@@ -235,6 +240,8 @@ def create_stock_prices(curr_company: dict, start_date: str):
 
 # Comment out if not using the adj inflation creation endpoint to preserve time on initial loading of the API
 # import cpi
+
+
 @celery_app.task(name="create_adj_inflation_stock_prices", base=BaseTaskWithRetry)
 def create_adj_inflation_stock_prices(stock_prices_list: list):
     # Logic here
@@ -258,31 +265,31 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
                     curr_stock_price["open"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
-                    item="Purchasing power of the consumer dollar",
+                    items="Purchasing power of the consumer dollar",
                 ),
                 high=cpi.inflate(
                     curr_stock_price["high"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
-                    item="Purchasing power of the consumer dollar",
+                    items="Purchasing power of the consumer dollar",
                 ),
                 low=cpi.inflate(
                     curr_stock_price["low"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
-                    item="Purchasing power of the consumer dollar",
+                    items="Purchasing power of the consumer dollar",
                 ),
                 close=cpi.inflate(
                     curr_stock_price["close"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
-                    item="Purchasing power of the consumer dollar",
+                    items="Purchasing power of the consumer dollar",
                 ),
                 adjusted_close=cpi.inflate(
                     curr_stock_price["adjusted_close"],
                     datetime.datetime.fromisoformat(curr_stock_price["timestamp"]),
                     to=datetime.datetime.fromisoformat(init_stock_price["timestamp"]),
-                    item="Purchasing power of the consumer dollar",
+                    items="Purchasing power of the consumer dollar",
                 ),
                 volume=curr_stock_price["volume"],
                 divident_amount=curr_stock_price["divident_amount"],
@@ -291,7 +298,7 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
 
             list_of_adj_inflation.append(stock_price_obj.dict(by_alias=True))
         except Exception as e:
-            pass
+            print(e)
 
     # connect to DB
     client = None
@@ -310,3 +317,70 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
     add_stock_prices(db, list_of_adj_inflation, stock_price_collection)
     close_mongo_connection(client)
     return f"{curr_stock_price['metadata']['cik']} ticker is {curr_stock_price['metadata']['ticker']} | Adjusted to inflation stock prices added succesfully"
+
+
+@celery_app.task(name="create_model_input_data", base=BaseTaskWithRetry)
+def create_model_input_data(company_list: list, stock_prices_list: list):
+    df_filings_deadlines = pd.read_csv(os.getenv("PATH_TO_FILING_DEADLINES"))
+    company_input_data_handler_obj = company_input_data_handler.CompanyInputDataHandler(
+        company_list, stock_prices_list, df_filings_deadlines
+    )
+    company_input_data_handler_obj.logic()
+
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    for dict_input in company_input_data_handler_obj.list_of_input_company:
+        try:
+            input_data_obj = InputData(
+                cik=dict_input["cik"],
+                year=dict_input["year"],
+                type=dict_input["type"],
+                q=dict_input["q"],
+                mda_section=dict_input["mda_section"],
+                risk_section=dict_input["risk_section"],
+                company_type=dict_input["company_type"],
+                filing_date=datetime.datetime.fromisoformat(dict_input["filing_date"]),
+                period_of_report=datetime.datetime.fromisoformat(
+                    dict_input["period_of_report"]
+                ),
+                is_filing_on_time=dict_input["is_filing_on_time"],
+                close_filing_date=dict_input["close_filing_date"],
+                volume_filing_date=dict_input["volume_filing_date"],
+                close_next_day_filing_date=dict_input["close_next_day_filing_date"],
+                volume_next_day_filing_date=dict_input["volume_next_day_filing_date"],
+                label=dict_input["label"],
+                percentage_change=dict_input["percentage_change"],
+                k_fold_config=dict_input["k_fold_config"],
+                mda_paragraphs=dict_input["mda_paragraphs"],
+                risk_paragraphs=dict_input["risk_paragraphs"],
+            )
+
+            delete_input_data(
+                db,
+                dict_input["cik"],
+                dict_input["year"],
+                dict_input["type"],
+                datetime.datetime.fromisoformat(dict_input["period_of_report"]),
+                input_data_collection,
+            )
+
+            add_input_data(
+                db, input_data_obj.dict(by_alias=True), input_data_collection
+            )
+        except Exception as e:
+            print(traceback.format_exc())
+
+    close_mongo_connection(client)
+    if company_input_data_handler_obj.list_of_input_company:
+        return (
+            f"Success for {company_list[0]['cik']} | Model input data added succesfully"
+        )
+    else:
+        return f"Skipping for {company_list[0]['cik']} | Lacking stock prices in the period"
