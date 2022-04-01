@@ -2,6 +2,7 @@
 import copy
 import json
 import traceback
+
 from services import process_filing, company_input_data_handler
 from services.utils import load_search_terms, requests_get
 
@@ -17,6 +18,7 @@ from models.quarter import Quarter
 from models.stock_price import StockPrice
 from models.metadata import Metadata
 from models.input_data import InputData
+from models.storage import Storage
 
 import celery
 from celery.utils.log import get_task_logger
@@ -462,6 +464,7 @@ def create_scaled_data(k_fold: int):
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=False
         )
+        
 
     # For validation
     for idx, (min_max_scaled, standard_scaled) in enumerate(
@@ -471,8 +474,8 @@ def create_scaled_data(k_fold: int):
         )
     ):
         curr_id = list_of_val_input[idx]["_id"]
-        curr_dict_min_max = list_of_train_input[idx]["percentage_change_scaled_min_max"]
-        curr_dict_standard = list_of_train_input[idx][
+        curr_dict_min_max = list_of_val_input[idx]["percentage_change_scaled_min_max"]
+        curr_dict_standard = list_of_val_input[idx][
             "percentage_change_scaled_standard"
         ]
 
@@ -486,15 +489,18 @@ def create_scaled_data(k_fold: int):
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=False
         )
+        
 
     min_max_scaler_pkl = pickle.dumps(scaler_min_max)
     standard_scaler_pkl = pickle.dumps(scaler_standard)
-    db[storage_collection].insert_one(
-        {"dumped_object": min_max_scaler_pkl, "name": "min_max", "k_fold": k_fold}
+    storage_min_max = Storage(
+        dumped_object=min_max_scaler_pkl, name="min_max", k_fold=k_fold
+    )
+    storage_standard = Storage(
+        dumped_object=standard_scaler_pkl, name="standard", k_fold=k_fold
     )
 
-    db[storage_collection].insert_one(
-        {"dumped_object": standard_scaler_pkl, "name": "standard", "k_fold": k_fold}
-    )
+    db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
+    db[storage_collection].insert_one(storage_standard.dict(by_alias=True))
 
     return f"Success for k-fold {k_fold} | Scalers saved and data updated"

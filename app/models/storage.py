@@ -1,17 +1,19 @@
-from datetime import datetime
-from typing import List, Optional
+from typing import Any
 from pydantic import BaseModel, Field
 
 from models.quarter import Quarter
 from utils import PyObjectId
 from bson import ObjectId
 
+from datetime import datetime
+
 # This is the representation of how the data is going to be stored in MongoDB
 class Storage(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    dumped_object = Field(...)
+    dumped_object: Any = Field(...)
     name: str = Field(...)
     k_fold: int = Field(...)
+    date_created: datetime = datetime.now()
 
     class Config:
         allow_population_by_field_name = True
