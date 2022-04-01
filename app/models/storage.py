@@ -11,8 +11,8 @@ class Storage(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     dumped_object = Field(...)
     name: str = Field(...)
-    info: Optional[dict] = None
-    
+    k_fold: int = Field(...)
+
     class Config:
         allow_population_by_field_name = True
         arbitrary_types_allowed = True

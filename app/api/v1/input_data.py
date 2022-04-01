@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
+from schemas.scaler import Scaler
 from utils import parse_model_to_dict
 from databases.mongodb.session import get_database_async
 from crud.company import get_company_async
 from crud.stock_price import get_stock_prices
 from schemas.input_data import InputData, ResponseModel, ErrorResponseModel
-from celery_worker import create_model_input_data
+from celery_worker import create_model_input_data, create_scaled_data
 
 router = APIRouter()
 
@@ -36,3 +37,10 @@ async def add_model_input_data(
             404,
             "Company doesn't exist or stock prices for inflation are not added. Therefore model input data can't be added.",
         )
+
+
+@router.post("/scale/", response_description="Scale label data from a certain k-fold")
+async def scale_data(scaler_post: Scaler = Body(...)):
+    scaled_dict = scaler_post.dict()
+    create_scaled_data.delay(scaled_dict["k_fold"])
+    return ResponseModel([], "Task added to queue.")

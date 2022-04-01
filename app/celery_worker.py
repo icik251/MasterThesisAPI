@@ -7,7 +7,7 @@ from services.utils import load_search_terms, requests_get
 
 from crud.company import add_company, get_company
 from crud.stock_price import add_stock_prices, delete_stock_prices
-from crud.input_data import add_input_data, delete_input_data
+from crud.input_data import add_input_data, delete_input_data, get_input_data
 
 from databases.mongodb.session import get_database
 from databases.mongodb.mongo_utils import connect_to_mongo, close_mongo_connection
@@ -25,6 +25,10 @@ import datetime
 import time
 from dotenv import load_dotenv
 import os
+
+import numpy as np
+import pickle
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 load_dotenv("../.env")
 celery_app = celery.Celery(
@@ -384,3 +388,113 @@ def create_model_input_data(company_list: list, stock_prices_list: list):
         )
     else:
         return f"Skipping for {company_list[0]['cik']} | Lacking stock prices in the period"
+
+
+@celery_app.task(name="create_scaled_data", base=BaseTaskWithRetry)
+def create_scaled_data(k_fold: int):
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    storage_collection = os.getenv("STORAGE_COLLECTION")
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_train_input = get_input_data(
+        db=db,
+        k_fold=k_fold,
+        split_type="train",
+        input_data_collection=input_data_collection,
+    )
+    list_of_val_input = get_input_data(
+        db=db,
+        k_fold=k_fold,
+        split_type="val",
+        input_data_collection=input_data_collection,
+    )
+
+    list_of_train_perc_change = [x["percentage_change"] for x in list_of_train_input]
+    list_of_val_perc_change = [x["percentage_change"] for x in list_of_val_input]
+
+    scaler_min_max = MinMaxScaler()
+    scaler_standard = StandardScaler()
+
+    # Fit for both scalers
+    scaler_min_max.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
+    scaler_standard.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
+
+    # Transform for both scalers
+    list_of_train_perc_change_scaled_min_max = scaler_min_max.transform(
+        np.array(list_of_train_perc_change).reshape(-1, 1)
+    )
+    list_of_train_perc_change_scaled_standard = scaler_standard.transform(
+        np.array(list_of_train_perc_change).reshape(-1, 1)
+    )
+
+    list_of_val_perc_change_scaled_min_max = scaler_min_max.transform(
+        np.array(list_of_val_perc_change).reshape(-1, 1)
+    )
+    list_of_val_perc_change_scaled_standard = scaler_standard.transform(
+        np.array(list_of_val_perc_change).reshape(-1, 1)
+    )
+
+    # For training
+    for idx, (min_max_scaled, standard_scaled) in enumerate(
+        zip(
+            list_of_train_perc_change_scaled_min_max,
+            list_of_train_perc_change_scaled_standard,
+        )
+    ):
+        curr_id = list_of_train_input[idx]["_id"]
+        curr_dict_min_max = list_of_train_input[idx]["percentage_change_scaled_min_max"]
+        curr_dict_standard = list_of_train_input[idx][
+            "percentage_change_scaled_standard"
+        ]
+
+        curr_dict_min_max[str(k_fold)] = min_max_scaled[0]
+        curr_dict_standard[str(k_fold)] = standard_scaled[0]
+        update_query = {
+            "percentage_change_scaled_min_max": curr_dict_min_max,
+            "percentage_change_scaled_standard": curr_dict_standard,
+        }
+        db[input_data_collection].update_one(
+            {"_id": curr_id}, {"$set": update_query}, upsert=False
+        )
+
+    # For validation
+    for idx, (min_max_scaled, standard_scaled) in enumerate(
+        zip(
+            list_of_val_perc_change_scaled_min_max,
+            list_of_val_perc_change_scaled_standard,
+        )
+    ):
+        curr_id = list_of_val_input[idx]["_id"]
+        curr_dict_min_max = list_of_train_input[idx]["percentage_change_scaled_min_max"]
+        curr_dict_standard = list_of_train_input[idx][
+            "percentage_change_scaled_standard"
+        ]
+
+        curr_dict_min_max[str(k_fold)] = min_max_scaled[0]
+        curr_dict_standard[str(k_fold)] = standard_scaled[0]
+
+        update_query = {
+            "percentage_change_scaled_min_max": curr_dict_min_max,
+            "percentage_change_scaled_standard": curr_dict_standard,
+        }
+        db[input_data_collection].update_one(
+            {"_id": curr_id}, {"$set": update_query}, upsert=False
+        )
+
+    min_max_scaler_pkl = pickle.dumps(scaler_min_max)
+    standard_scaler_pkl = pickle.dumps(scaler_standard)
+    db[storage_collection].insert_one(
+        {"dumped_object": min_max_scaler_pkl, "name": "min_max", "k_fold": k_fold}
+    )
+
+    db[storage_collection].insert_one(
+        {"dumped_object": standard_scaler_pkl, "name": "standard", "k_fold": k_fold}
+    )
+
+    return f"Success for k-fold {k_fold} | Scalers saved and data updated"

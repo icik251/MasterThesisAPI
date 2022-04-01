@@ -24,8 +24,8 @@ class InputData(BaseModel):
     volume_next_day_filing_date: float = Field(...)
     label: Optional[str] = None
     percentage_change: Optional[float] = None
-    percentage_change_scaled_min_max: Optional[float] = None
-    percentage_change_scaled_standard: Optional[float] = None
+    percentage_change_scaled_min_max: Optional[dict] = {}
+    percentage_change_scaled_standard: Optional[dict] = {}
     k_fold_config: dict = Field(...)
     mda_paragraphs: Optional[dict] = {}
     risk_paragraphs: Optional[dict] = {}
