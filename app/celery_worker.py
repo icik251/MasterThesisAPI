@@ -3,12 +3,17 @@ import copy
 import json
 import traceback
 
-from services import process_filing, company_input_data_handler
+from services import (
+    process_filing,
+    company_input_data_handler,
+    company_fundamental_data_handler,
+)
 from services.utils import load_search_terms, requests_get
 
 from crud.company import add_company, get_company
 from crud.stock_price import add_stock_prices, delete_stock_prices
 from crud.input_data import add_input_data, delete_input_data, get_input_data
+from crud.fundamental_data import add_fundamental_data, delete_fundamental_data
 
 from databases.mongodb.session import get_database
 from databases.mongodb.mongo_utils import connect_to_mongo, close_mongo_connection
@@ -19,6 +24,7 @@ from models.stock_price import StockPrice
 from models.metadata import Metadata
 from models.input_data import InputData
 from models.storage import Storage
+from models.fundamental_data import FundamentalData
 
 import celery
 from celery.utils.log import get_task_logger
@@ -464,7 +470,6 @@ def create_scaled_data(k_fold: int):
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=False
         )
-        
 
     # For validation
     for idx, (min_max_scaled, standard_scaled) in enumerate(
@@ -475,9 +480,7 @@ def create_scaled_data(k_fold: int):
     ):
         curr_id = list_of_val_input[idx]["_id"]
         curr_dict_min_max = list_of_val_input[idx]["percentage_change_scaled_min_max"]
-        curr_dict_standard = list_of_val_input[idx][
-            "percentage_change_scaled_standard"
-        ]
+        curr_dict_standard = list_of_val_input[idx]["percentage_change_scaled_standard"]
 
         curr_dict_min_max[str(k_fold)] = min_max_scaled[0]
         curr_dict_standard[str(k_fold)] = standard_scaled[0]
@@ -489,7 +492,6 @@ def create_scaled_data(k_fold: int):
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=False
         )
-        
 
     min_max_scaler_pkl = pickle.dumps(scaler_min_max)
     standard_scaler_pkl = pickle.dumps(scaler_standard)
@@ -503,4 +505,59 @@ def create_scaled_data(k_fold: int):
     db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
     db[storage_collection].insert_one(storage_standard.dict(by_alias=True))
 
+    close_mongo_connection(client)
+
     return f"Success for k-fold {k_fold} | Scalers saved and data updated"
+
+
+@celery_app.task(name="create_fundamental_data", base=BaseTaskWithRetry)
+def create_fundamental_data(cik: int, ticker: str):
+    r = requests_get(
+        f"https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol={ticker}&apikey={os.getenv('AV_API_KEY')}"
+    )
+    data_income_statements = r.json()
+    r = requests_get(
+        f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={ticker}&apikey={os.getenv('AV_API_KEY')}"
+    )
+    data_balance_sheets = r.json()
+    r = requests_get(
+        f"https://www.alphavantage.co/query?function=CASH_FLOW&symbol={ticker}&apikey={os.getenv('AV_API_KEY')}"
+    )
+    data_cash_flows = r.json()
+
+    data_handler_obj = company_fundamental_data_handler.CompanyFundamentalDataHanddler()
+    processed_income_statements = data_handler_obj.process_data(
+        data_income_statements["quarterlyReports"]
+    )
+    processed_balance_sheets = data_handler_obj.process_data(
+        data_balance_sheets["quarterlyReports"]
+    )
+    processed_cash_flows = data_handler_obj.process_data(
+        data_cash_flows["quarterlyReports"]
+    )
+
+    fundamental_data_dict = FundamentalData(
+        cik=cik,
+        ticker=ticker,
+        balance_sheets=processed_balance_sheets,
+        income_statements=processed_income_statements,
+        cash_flows=processed_cash_flows,
+    )
+
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    fundamental_data_collection = os.getenv("FUNDAMENTAL_DATA_COLLECTION")
+
+    delete_fundamental_data(db, cik, fundamental_data_collection)
+    add_fundamental_data(
+        db, fundamental_data_dict.dict(by_alias=True), fundamental_data_collection
+    )
+
+    close_mongo_connection(client)
+
+    return f"Successfuly added fundamental data for cik: {cik}"
