@@ -332,10 +332,12 @@ def create_adj_inflation_stock_prices(stock_prices_list: list):
 
 
 @celery_app.task(name="create_model_input_data", base=BaseTaskWithRetry)
-def create_model_input_data(company_list: list, stock_prices_list: list):
+def create_model_input_data(
+    company_list: list, stock_prices_list: list, fundamental_data_dict: dict
+):
     df_filings_deadlines = pd.read_csv(os.getenv("PATH_TO_FILING_DEADLINES"))
     company_input_data_handler_obj = company_input_data_handler.CompanyInputDataHandler(
-        company_list, stock_prices_list, df_filings_deadlines
+        company_list, stock_prices_list, fundamental_data_dict, df_filings_deadlines
     )
     company_input_data_handler_obj.logic()
 
@@ -363,15 +365,16 @@ def create_model_input_data(company_list: list, stock_prices_list: list):
                     dict_input["period_of_report"]
                 ),
                 is_filing_on_time=dict_input["is_filing_on_time"],
-                close_filing_date=dict_input["close_filing_date"],
-                volume_filing_date=dict_input["volume_filing_date"],
-                close_next_day_filing_date=dict_input["close_next_day_filing_date"],
-                volume_next_day_filing_date=dict_input["volume_next_day_filing_date"],
+                close_price=dict_input["close_price"],
+                volume=dict_input["volume"],
+                close_price_next_day=dict_input["close_price_next_day"],
+                volume_next_day=dict_input["volume_next_day"],
                 label=dict_input["label"],
                 percentage_change=dict_input["percentage_change"],
                 k_fold_config=dict_input["k_fold_config"],
                 mda_paragraphs=dict_input["mda_paragraphs"],
                 risk_paragraphs=dict_input["risk_paragraphs"],
+                fundamental_data=dict_input["fundamental_data"],
             )
 
             delete_input_data(

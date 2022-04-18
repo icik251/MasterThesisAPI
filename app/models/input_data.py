@@ -18,10 +18,10 @@ class InputData(BaseModel):
     filing_date: datetime = Field(...)
     period_of_report: datetime = Field(...)
     is_filing_on_time: bool = Field(...)
-    close_filing_date: float = Field(...)
-    volume_filing_date: float = Field(...)
-    close_next_day_filing_date: float = Field(...)
-    volume_next_day_filing_date: float = Field(...)
+    close_price: float = Field(...)
+    volume: float = Field(...)
+    close_price_next_day: float = Field(...)
+    volume_next_day: float = Field(...)
     label: Optional[str] = None
     percentage_change: Optional[float] = None
     percentage_change_scaled_min_max: Optional[dict] = {}
@@ -29,6 +29,7 @@ class InputData(BaseModel):
     k_fold_config: dict = Field(...)
     mda_paragraphs: Optional[dict] = {}
     risk_paragraphs: Optional[dict] = {}
+    fundamental_data: Optional[dict] = {}
 
     class Config:
         allow_population_by_field_name = True

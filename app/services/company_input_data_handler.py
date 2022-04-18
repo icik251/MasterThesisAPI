@@ -8,10 +8,15 @@ import requests
 
 class CompanyInputDataHandler:
     def __init__(
-        self, list_company, list_inflation_prices, df_filings_deadlines
+        self,
+        list_company,
+        list_inflation_prices,
+        fundamental_data_dict,
+        df_filings_deadlines,
     ) -> None:
         self.list_company = list_company
         self.list_inflation_prices = list_inflation_prices
+        self.fundamental_data_dict = fundamental_data_dict
         self.df_filings_deadlines = df_filings_deadlines
         self.list_of_input_company = []
 
@@ -52,7 +57,7 @@ class CompanyInputDataHandler:
             else:
                 print(f"CIK: {self.list_company[0]['cik']}")
                 print("Not on time, going into the next quarter")
-                return False
+                return False, None
 
         except Exception as e:
             print(traceback.format_exc())
@@ -63,12 +68,18 @@ class CompanyInputDataHandler:
         deadline_str = deadline_str.replace("year", str(filing_date_datetime.year))
         deadline_datetime = datetime.strptime(deadline_str, "%Y-%d-%m")
         if filing_date_datetime > deadline_datetime:
-            return False
-        return True
+            return False, None
+        return True, deadline_datetime
 
     def _get_price_for_filing_date(self, stock_prices_list, filing_date):
         for idx, item in enumerate(stock_prices_list):
             if item["timestamp"] == filing_date:
+                return stock_prices_list[idx], stock_prices_list[idx + 1]
+        return None, None
+
+    def _get_price_for_filing_deadline_date(self, stock_prices_list, deadline_str):
+        for idx, item in enumerate(stock_prices_list):
+            if item["timestamp"] == deadline_str:
                 return stock_prices_list[idx], stock_prices_list[idx + 1]
         return None, None
 
@@ -87,19 +98,31 @@ class CompanyInputDataHandler:
                         continue
 
                     curr_input_data = {}
-                    t_obj, t_1_obj = self._get_price_for_filing_date(
-                        self.list_inflation_prices, metadata["filing_date"]
-                    )
-                    if not t_obj and not t_1_obj:
-                        self.list_of_input_company = []
-                        return None
 
-                    filing_on_time = self._is_filing_on_time(
+                    filing_on_time, deadline_datetime = self._is_filing_on_time(
                         metadata["type"],
                         quarter["q"],
                         metadata["company_type"],
                         metadata["filing_date"],
                     )
+
+                    if not filing_on_time:
+                        # if filing is not on time, we take the price after it is filed
+                        t_obj, t_1_obj = self._get_price_for_filing_date(
+                            self.list_inflation_prices, metadata["filing_date"]
+                        )
+                        if not t_obj and not t_1_obj:
+                            self.list_of_input_company = []
+                            return None
+                    else:
+                        # if it is on time, we take the price of the deadline
+                        t_obj, t_1_obj = self._get_price_for_filing_deadline_date(
+                            self.list_inflation_prices, deadline_datetime
+                        )
+                        if not t_obj and not t_1_obj:
+                            self.list_of_input_company = []
+                            return None
+
                     k_fold_config = self._create_k_fold_config(
                         company_year_dict["year"]
                     )
@@ -114,12 +137,10 @@ class CompanyInputDataHandler:
                     curr_input_data["filing_date"] = metadata["filing_date"]
                     curr_input_data["period_of_report"] = metadata["period_of_report"]
                     curr_input_data["is_filing_on_time"] = filing_on_time
-                    curr_input_data["close_filing_date"] = t_obj["adjusted_close"]
-                    curr_input_data["volume_filing_date"] = t_obj["volume"]
-                    curr_input_data["close_next_day_filing_date"] = t_1_obj[
-                        "adjusted_close"
-                    ]
-                    curr_input_data["volume_next_day_filing_date"] = t_1_obj["volume"]
+                    curr_input_data["close_price"] = t_obj["adjusted_close"]
+                    curr_input_data["volume"] = t_obj["volume"]
+                    curr_input_data["close_price_next_day"] = t_1_obj["adjusted_close"]
+                    curr_input_data["volume_next_day"] = t_1_obj["volume"]
                     curr_input_data["k_fold_config"] = k_fold_config
 
                     self.list_of_input_company.append(curr_input_data)
