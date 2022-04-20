@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime
 import traceback
+from .fundamental_data_handler import FundamentalDataHandler
 import pandas as pd
 import json
 import requests
@@ -73,14 +74,18 @@ class CompanyInputDataHandler:
 
     def _get_price_for_filing_date(self, stock_prices_list, filing_date):
         for idx, item in enumerate(stock_prices_list):
-            if item["timestamp"] == filing_date:
+            if datetime.fromisoformat(item["timestamp"]) == datetime.fromisoformat(filing_date):
                 return stock_prices_list[idx], stock_prices_list[idx + 1]
+            elif datetime.fromisoformat(item["timestamp"]) > datetime.fromisoformat(filing_date):
+                return stock_prices_list[idx], stock_prices_list[idx]
         return None, None
 
-    def _get_price_for_filing_deadline_date(self, stock_prices_list, deadline_str):
+    def _get_price_for_filing_deadline_date(self, stock_prices_list, deadline_datetime):
         for idx, item in enumerate(stock_prices_list):
-            if item["timestamp"] == deadline_str:
+            if datetime.fromisoformat(item["timestamp"]) == deadline_datetime:
                 return stock_prices_list[idx], stock_prices_list[idx + 1]
+            elif datetime.fromisoformat(item["timestamp"]) > deadline_datetime:
+                return stock_prices_list[idx], stock_prices_list[idx]
         return None, None
 
     def _create_k_fold_config(self, year):
@@ -123,6 +128,13 @@ class CompanyInputDataHandler:
                             self.list_of_input_company = []
                             return None
 
+                    fundamental_data_handler = FundamentalDataHandler()
+                    fundamental_data_handler.process_company_fundamental_data(
+                        company_year_dict["cik"],
+                        self.fundamental_data_dict,
+                        t_1_obj["adjusted_close"],
+                    )
+
                     k_fold_config = self._create_k_fold_config(
                         company_year_dict["year"]
                     )
@@ -135,13 +147,19 @@ class CompanyInputDataHandler:
                     curr_input_data["risk_section"] = metadata["risk_section"]
                     curr_input_data["company_type"] = metadata["company_type"]
                     curr_input_data["filing_date"] = metadata["filing_date"]
+                    curr_input_data["deadline_date"] = deadline_datetime
                     curr_input_data["period_of_report"] = metadata["period_of_report"]
                     curr_input_data["is_filing_on_time"] = filing_on_time
+                    curr_input_data["close_price_date"] = t_obj["timestamp"]
                     curr_input_data["close_price"] = t_obj["adjusted_close"]
                     curr_input_data["volume"] = t_obj["volume"]
+                    curr_input_data["close_price_next_date"] = t_1_obj["timestamp"]
                     curr_input_data["close_price_next_day"] = t_1_obj["adjusted_close"]
                     curr_input_data["volume_next_day"] = t_1_obj["volume"]
                     curr_input_data["k_fold_config"] = k_fold_config
+                    curr_input_data[
+                        "fundamental_data"
+                    ] = fundamental_data_handler.company_ratios_dict
 
                     self.list_of_input_company.append(curr_input_data)
 
@@ -168,8 +186,8 @@ class CompanyInputDataHandler:
             next_sample_input = self.list_of_input_company[idx + 1]
 
             perc_change = self.get_percentage_diff(
-                curr_sample_input["close_next_day_filing_date"],
-                next_sample_input["close_next_day_filing_date"],
+                curr_sample_input["close_price_next_day"],
+                next_sample_input["close_price_next_day"],
             )
             if abs(perc_change) < perc_treshold:
                 curr_sample_input["label"] = "hold"

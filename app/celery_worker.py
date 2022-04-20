@@ -1,4 +1,5 @@
 # from services.sec_scraper import SECScraper
+from collections import defaultdict
 import copy
 import json
 import traceback
@@ -192,6 +193,7 @@ def create_stock_prices(curr_company: dict, start_date: str):
     stock_price_collection = os.getenv("STOCK_PRICE_COLLECTION")
 
     if not curr_company["ticker"]:
+        close_mongo_connection(client)
         return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Ticker does not exist, can't create time-series"
 
     r = requests_get(
@@ -208,6 +210,7 @@ def create_stock_prices(curr_company: dict, start_date: str):
     data = r.json()
     stock_prices_dict = data.get("Time Series (Daily)", None)
     if not stock_prices_dict or len(stock_prices_dict) == 0:
+        close_mongo_connection(client)
         return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | No data for company, can't create time-series"
 
     # Process start date logic
@@ -221,8 +224,12 @@ def create_stock_prices(curr_company: dict, start_date: str):
     idx = list_of_dates.index(start_date)
     list_of_dates = list_of_dates[: idx + 1]
 
+    dict_of_dates_checkers = defaultdict(int)
+
     list_prices = []
     for date in sorted(list_of_dates):
+        dict_of_dates_checkers[date.split("-")[0]] += 1
+
         curr_data_dict = stock_prices_dict[date]
         stock_price_obj = StockPrice(
             metadata={
@@ -242,6 +249,18 @@ def create_stock_prices(curr_company: dict, start_date: str):
         )
         list_prices.append(stock_price_obj.dict(by_alias=True))
 
+    # ~252 are the official trading days, we set 240
+    threshold_trading_days = 240
+    if (
+        dict_of_dates_checkers["2017"] < threshold_trading_days
+        or dict_of_dates_checkers["2018"] < threshold_trading_days
+        or dict_of_dates_checkers["2019"] < threshold_trading_days
+        or dict_of_dates_checkers["2020"] < threshold_trading_days
+        or dict_of_dates_checkers["2021"] < threshold_trading_days
+    ):
+        close_mongo_connection(client)
+        return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Not enough data for company, can't create time-series, \
+            2017 days: {dict_of_dates_checkers['2017']} | 2018 days: {dict_of_dates_checkers['2018']} | 2019 days: {dict_of_dates_checkers['2019']} | 2020 days: {dict_of_dates_checkers['2020']} | 2021 days: {dict_of_dates_checkers['2021']}"
     # delete old time-series if exists for company
     delete_stock_prices(db, curr_company["cik"], "adj_close", stock_price_collection)
     # add new stock prices
@@ -361,12 +380,15 @@ def create_model_input_data(
                 risk_section=dict_input["risk_section"],
                 company_type=dict_input["company_type"],
                 filing_date=datetime.datetime.fromisoformat(dict_input["filing_date"]),
+                deadline_date=dict_input["deadline_date"],
                 period_of_report=datetime.datetime.fromisoformat(
                     dict_input["period_of_report"]
                 ),
                 is_filing_on_time=dict_input["is_filing_on_time"],
+                close_price_date=dict_input["close_price_date"],
                 close_price=dict_input["close_price"],
                 volume=dict_input["volume"],
+                close_price_next_date=dict_input["close_price_next_date"],
                 close_price_next_day=dict_input["close_price_next_day"],
                 volume_next_day=dict_input["volume_next_day"],
                 label=dict_input["label"],
@@ -528,7 +550,7 @@ def create_fundamental_data(cik: int, ticker: str):
     )
     data_cash_flows = r.json()
 
-    data_handler_obj = company_fundamental_data_handler.CompanyFundamentalDataHanddler()
+    data_handler_obj = company_fundamental_data_handler.CompanyFundamentalDataHandler()
     processed_income_statements = data_handler_obj.process_data(
         data_income_statements["quarterlyReports"]
     )

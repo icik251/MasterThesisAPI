@@ -16,10 +16,13 @@ class InputData(BaseModel):
     risk_section: Optional[str] = None
     company_type: str = Field(...)
     filing_date: datetime = Field(...)
+    deadline_date: Optional[datetime] = None
     period_of_report: datetime = Field(...)
     is_filing_on_time: bool = Field(...)
+    close_price_date: datetime = Field(...)
     close_price: float = Field(...)
     volume: float = Field(...)
+    close_price_next_date: datetime = Field(...)
     close_price_next_day: float = Field(...)
     volume_next_day: float = Field(...)
     label: Optional[str] = None

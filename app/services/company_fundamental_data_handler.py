@@ -3,7 +3,7 @@ from collections import defaultdict
 import requests
 
 
-class CompanyFundamentalDataHanddler:
+class CompanyFundamentalDataHandler:
     def __init__(
         self,
     ) -> None:
