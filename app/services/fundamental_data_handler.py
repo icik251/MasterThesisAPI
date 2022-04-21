@@ -9,13 +9,117 @@ class FundamentalDataHandler:
         self.cash_flows = None
 
         self.company_ratios_dict = defaultdict(dict)
+        self.company_ratios_period_dict = {}
 
     def calculate_average(self, list_of_fundamental_data):
         pass
 
+    def process_company_fundamental_data_for_period(
+        self, cik, fundamental_data_dict, current_stock_price, period
+    ):
+        self.balance_sheets = fundamental_data_dict["balance_sheets"]
+        self.income_statements = fundamental_data_dict["income_statements"]
+        self.cash_flows = fundamental_data_dict["cash_flows"]
+
+        # list_of_bs_keys = list(self.balance_sheets.keys())
+        # list_of_is_keys = list(self.income_statements.keys())
+        # list_of_cf_keys = list(self.cash_flows.keys())
+
+        # if period not in list_of_bs_keys:
+        #     print(f"CIK: {cik}, Index not found for period: {period}")
+        #     return
+
+        # idx_of_period_bs = list_of_bs_keys.index(period)
+
+        # # Check for correctness
+        # period_key_bs = list_of_bs_keys[idx_of_period_bs]
+        # period_key_is = list_of_is_keys[idx_of_period_bs]
+        # period_key_cf = list_of_cf_keys[idx_of_period_bs]
+
+        # if (
+        #     period_key_bs != period_key_is
+        #     or period_key_bs != period_key_is
+        #     or period_key_is != period_key_cf
+        # ):
+        #     print(
+        #         f"CIK: {cik}, BS: {period_key_bs} | IS: {period_key_is} | CS {period_key_cf}"
+        #     )
+
+        """
+        Profitability Ratios
+        """
+        # Return Ratios
+        self.company_ratios_period_dict["roe"] = self._get_return_on_equity(
+            period, period
+        )
+        self.company_ratios_period_dict["roa"] = self._get_return_on_assets(
+            period, period
+        )
+        self.company_ratios_period_dict["roce"] = self._get_return_on_capital_employed(
+            period, period
+        )
+        # Margin Ratios
+        self.company_ratios_period_dict["gross_margin"] = self._get_gross_margin_ratio(
+            period
+        )
+        self.company_ratios_period_dict[
+            "operating_profit_margin"
+        ] = self._get_operating_profit_margin(period)
+        self.company_ratios_period_dict[
+            "net_profit_margin"
+        ] = self._get_net_profit_margin(period)
+        """
+            Leverage Ratios
+        """
+        self.company_ratios_period_dict[
+            "debt_to_equity"
+        ] = self._get_debt_to_equity_ratio(period)
+        self.company_ratios_period_dict["equity"] = self._get_equity_ratio(period)
+        self.company_ratios_period_dict["debt"] = self._get_debt_ratio(period)
+        """
+            Efficiency Ratios
+        """
+        pass
+        """
+            Liquidity Ratios
+        """
+        # Asset Ratios
+        self.company_ratios_period_dict["current"] = self._get_current_ratio(period)
+        self.company_ratios_period_dict["quick"] = self._get_quick_ratio(period)
+        self.company_ratios_period_dict["cash"] = self._get_cash_ratio(period)
+        # Earnings Ratios
+        self.company_ratios_period_dict[
+            "times_interest_earned"
+        ] = self._get_times_interest_earned_ratio(period)
+        # Cash Flow Ratios
+        self.company_ratios_period_dict[
+            "capex_to_operating_cash"
+        ] = self._get_capex_to_operating_cash_ratio(period)
+        self.company_ratios_period_dict[
+            "operating_cash_flow"
+        ] = self._get_operating_cash_flow_ratio(period, period)
+        """
+            Multiples Valuation Ratios
+        """
+        # Price Ratios
+        self.company_ratios_period_dict[
+            "price_to_earnings"
+        ] = self._get_price_to_earnings_ratio_2(period, period, current_stock_price)
+        # Enterprise Value Ratios
+        self.company_ratios_period_dict["ev_ebitda"] = self._get_ev_ebitda_ratio(
+            period, period, current_stock_price
+        )
+        self.company_ratios_period_dict["ev_ebit"] = self._get_ev_ebit_ratio(
+            period, period, current_stock_price
+        )
+        self.company_ratios_period_dict["ev_revenue"] = self._get_ev_revenue_ratio(
+            period, period, current_stock_price
+        )
+
     def process_company_fundamental_data(
         self, cik, fundamental_data_dict, current_stock_price
     ):
+        # Process for all periods
         self.list_of_periods_of_reports_bs = list(
             fundamental_data_dict["balance_sheets"].keys()
         )
@@ -41,7 +145,7 @@ class FundamentalDataHandler:
                 or period_key_is != period_key_cf
             ):
                 print(
-                    f"CIK: {cik}, BS: {period_key_bs} | IS: {period_key_is} | CS {period_key_is}"
+                    f"CIK: {cik}, BS: {period_key_bs} | IS: {period_key_is} | CS {period_key_cf}"
                 )
             """
             Profitability Ratios
@@ -142,10 +246,9 @@ class FundamentalDataHandler:
     # Return Ratios
     def _get_return_on_equity(self, period_bs, period_is):
         # ROE
-        if (
-            self.balance_sheets[period_bs]["totalShareholderEquity"]
-            and self.income_statements[period_is]["netIncome"]
-        ):
+        if self.balance_sheets.get(period_bs, {}).get(
+            "totalShareholderEquity", None
+        ) and self.income_statements.get(period_is, {}).get("netIncome", None):
             return (
                 self.balance_sheets[period_bs]["totalShareholderEquity"]
                 / self.income_statements[period_is]["netIncome"]
@@ -155,8 +258,8 @@ class FundamentalDataHandler:
     def _get_return_on_assets(self, period_bs, period_is):
         # ROA
         if (
-            self.income_statements[period_is]["netIncome"]
-            and self.balance_sheets[period_bs]["totalAssets"]
+            self.income_statements.get(period_is, {}).get("netIncome", None)
+            and self.balance_sheets.get(period_bs, {}).get("totalAssets", None)
         ):
             return (
                 self.income_statements[period_is]["netIncome"]
@@ -167,9 +270,9 @@ class FundamentalDataHandler:
     def _get_return_on_capital_employed(self, period_bs, period_is):
         # ROCE
         if (
-            self.income_statements[period_is]["ebit"]
-            and self.balance_sheets[period_bs]["totalAssets"]
-            and self.balance_sheets[period_bs]["totalCurrentLiabilities"]
+            self.income_statements.get(period_is, {}).get("ebit", None)
+            and self.balance_sheets.get(period_bs, {}).get("totalAssets", None)
+            and self.balance_sheets.get(period_bs, {}).get("totalCurrentLiabilities", None)
         ):
             return self.income_statements[period_is]["ebit"] / (
                 self.balance_sheets[period_bs]["totalAssets"]
@@ -181,8 +284,8 @@ class FundamentalDataHandler:
     def _get_gross_margin_ratio(self, period):
         # Gross Margin Ratio
         if (
-            self.income_statements[period]["grossProfit"]
-            and self.income_statements[period]["totalRevenue"]
+            self.income_statements.get(period, {}).get("grossProfit", None)
+            and self.income_statements.get(period, {}).get("totalRevenue", None)
         ):
             return (
                 self.income_statements[period]["grossProfit"]
@@ -192,8 +295,8 @@ class FundamentalDataHandler:
     def _get_operating_profit_margin(self, period):
         # Operating Profit Margin
         if (
-            self.income_statements[period]["ebit"]
-            and self.income_statements[period]["totalRevenue"]
+            self.income_statements.get(period, {}).get("ebit", None)
+            and self.income_statements.get(period, {}).get("totalRevenue", None)
         ):
             return (
                 self.income_statements[period]["ebit"]
@@ -203,8 +306,8 @@ class FundamentalDataHandler:
     def _get_net_profit_margin(self, period):
         # Net Profit Margin
         if (
-            self.income_statements[period]["netIncome"]
-            and self.income_statements[period]["totalRevenue"]
+            self.income_statements.get(period, {}).get("netIncome", None)
+            and self.income_statements.get(period, {}).get("totalRevenue", None)
         ):
             return (
                 self.income_statements[period]["netIncome"]
@@ -220,8 +323,8 @@ class FundamentalDataHandler:
         # Debt to equity
         # NOTE: Implemented with totalLiabilities (version from financial-ratio cheat sheet)
         if (
-            self.balance_sheets[period]["totalLiabilities"]
-            and self.balance_sheets[period]["totalShareholderEquity"]
+            self.balance_sheets.get(period, {}).get("totalLiabilities", None)
+            and self.balance_sheets.get(period, {}).get("totalShareholderEquity", None)
         ):
             return (
                 self.balance_sheets[period]["totalLiabilities"]
@@ -232,8 +335,8 @@ class FundamentalDataHandler:
     def _get_equity_ratio(self, period):
         # Equity Ratio
         if (
-            self.balance_sheets[period]["totalShareholderEquity"]
-            and self.balance_sheets[period]["totalAssets"]
+            self.balance_sheets.get(period, {}).get("totalShareholderEquity", None)
+            and self.balance_sheets.get(period, {}).get("totalAssets", None)
         ):
             return (
                 self.balance_sheets[period]["totalShareholderEquity"]
@@ -244,8 +347,8 @@ class FundamentalDataHandler:
     def _get_debt_ratio(self, period):
         # Debt Ratio
         if (
-            self.balance_sheets[period]["shortLongTermDebtTotal"]
-            and self.balance_sheets[period]["totalAssets"]
+            self.balance_sheets.get(period, {}).get("shortLongTermDebtTotal", None)
+            and self.balance_sheets.get(period, {}).get("totalAssets", None)
         ):
             return (
                 self.balance_sheets[period]["shortLongTermDebtTotal"]
@@ -270,8 +373,8 @@ class FundamentalDataHandler:
     def _get_current_ratio(self, period):
         # Current Ratio
         if (
-            self.balance_sheets[period]["totalCurrentAssets"]
-            and self.balance_sheets[period]["totalCurrentLiabilities"]
+            self.balance_sheets.get(period, {}).get("totalCurrentAssets", None)
+            and self.balance_sheets.get(period, {}).get("totalCurrentLiabilities", None)
         ):
             return (
                 self.balance_sheets[period]["totalCurrentAssets"]
@@ -282,9 +385,9 @@ class FundamentalDataHandler:
     def _get_quick_ratio(self, period):
         # Quick Ratio
         if (
-            self.balance_sheets[period]["cashAndShortTermInvestments"]
-            and self.balance_sheets[period]["currentNetReceivables"]
-            and self.balance_sheets[period]["totalCurrentLiabilities"]
+            self.balance_sheets.get(period, {}).get("cashAndShortTermInvestments", None)
+            and self.balance_sheets.get(period, {}).get("currentNetReceivables", None)
+            and self.balance_sheets.get(period, {}).get("totalCurrentLiabilities", None)
         ):
             return (
                 self.balance_sheets[period]["cashAndShortTermInvestments"]
@@ -295,8 +398,8 @@ class FundamentalDataHandler:
     def _get_cash_ratio(self, period):
         # Cash Ratio
         if (
-            self.balance_sheets[period]["cashAndCashEquivalentsAtCarryingValue"]
-            and self.balance_sheets[period]["totalCurrentLiabilities"]
+            self.balance_sheets.get(period, {}).get("cashAndCashEquivalentsAtCarryingValue", None)
+            and self.balance_sheets.get(period, {}).get("totalCurrentLiabilities", None)
         ):
             return (
                 self.balance_sheets[period]["cashAndCashEquivalentsAtCarryingValue"]
@@ -311,8 +414,8 @@ class FundamentalDataHandler:
         # Times Interest Earned Ratio
 
         if (
-            self.income_statements[period]["ebit"]
-            and self.income_statements[period]["interestExpense"]
+            self.income_statements.get(period, {}).get("ebit", None)
+            and self.income_statements.get(period, {}).get("interestExpense", None)
         ):
             return (
                 self.income_statements[period]["ebit"]
@@ -327,8 +430,8 @@ class FundamentalDataHandler:
         # CAPEX (Capital Expenditures) to Operating cash Ratio
 
         if (
-            self.cash_flows[period]["operatingCashflow"]
-            and self.cash_flows[period]["capitalExpenditures"]
+            self.cash_flows.get(period, {}).get("operatingCashflow", None)
+            and self.cash_flows.get(period, {}).get("capitalExpenditures", None)
         ):
             return (
                 self.cash_flows[period]["operatingCashflow"]
@@ -340,8 +443,8 @@ class FundamentalDataHandler:
         # Operating Cash Flow Ratio
 
         if (
-            self.cash_flows[period_cf]["operatingCashflow"]
-            and self.balance_sheets[perios_bs]["totalCurrentLiabilities"]
+            self.cash_flows.get(period_cf, {}).get("operatingCashflow", None)
+            and self.balance_sheets.get(perios_bs, {}).get("totalCurrentLiabilities", None)
         ):
             return (
                 self.cash_flows[period_cf]["operatingCashflow"]
@@ -364,9 +467,9 @@ class FundamentalDataHandler:
         # Price to Earnings Ratio (P/E)
 
         if (
-            self.income_statements[period_is]["netIncome"]
-            and self.cash_flows[period_cf]["dividendPayoutPreferredStock"]
-            and self.balance_sheets[perios_bs]["commonStockSharesOutstanding"]
+            self.income_statements.get(period_is, {}).get("netIncome",None)
+            and self.cash_flows.get(period_cf, {}).get("dividendPayoutPreferredStock",None)
+            and self.balance_sheets.get(perios_bs, {}).get("commonStockSharesOutstanding",None)
         ):
             return current_stock_price / (
                 (
@@ -382,8 +485,8 @@ class FundamentalDataHandler:
         # Price to Earning Ratio (P/E)
 
         if (
-            self.income_statements[period_is]["netIncome"]
-            and self.balance_sheets[perios_bs]["commonStockSharesOutstanding"]
+            self.income_statements.get(period_is, {}).get("netIncome", None)
+            and self.balance_sheets.get(perios_bs, {}).get("commonStockSharesOutstanding", None)
         ):
             return current_stock_price / (
                 self.income_statements[period_is]["netIncome"]
@@ -397,10 +500,10 @@ class FundamentalDataHandler:
         # Enterprise value to EBITDA
 
         if (
-            self.balance_sheets[perios_bs]["commonStockSharesOutstanding"]
-            and self.balance_sheets[perios_bs]["cashAndCashEquivalentsAtCarryingValue"]
-            and self.balance_sheets[perios_bs]["shortLongTermDebtTotal"]
-            and self.income_statements[period_is]["ebitda"]
+            self.balance_sheets.get(perios_bs, {}).get("commonStockSharesOutstanding", None)
+            and self.balance_sheets.get(perios_bs, {}).get("cashAndCashEquivalentsAtCarryingValue", None)
+            and self.balance_sheets.get(perios_bs, {}).get("shortLongTermDebtTotal", None)
+            and self.income_statements.get(period_is, {}).get("ebitda", None)
         ):
             market_cap = (
                 current_stock_price
@@ -421,10 +524,10 @@ class FundamentalDataHandler:
         # Enterprise value to EBIT
 
         if (
-            self.balance_sheets[perios_bs]["commonStockSharesOutstanding"]
-            and self.balance_sheets[perios_bs]["cashAndCashEquivalentsAtCarryingValue"]
-            and self.balance_sheets[perios_bs]["shortLongTermDebtTotal"]
-            and self.income_statements[period_is]["ebit"]
+            self.balance_sheets.get(perios_bs, {}).get("commonStockSharesOutstanding", None)
+            and self.balance_sheets.get(perios_bs, {}).get("cashAndCashEquivalentsAtCarryingValue", None)
+            and self.balance_sheets.get(perios_bs, {}).get("shortLongTermDebtTotal", None)
+            and self.income_statements.get(period_is, {}).get("ebit", None)
         ):
             market_cap = (
                 current_stock_price
@@ -445,10 +548,10 @@ class FundamentalDataHandler:
         # Enterprise value to Revenue
 
         if (
-            self.balance_sheets[perios_bs]["commonStockSharesOutstanding"]
-            and self.balance_sheets[perios_bs]["cashAndCashEquivalentsAtCarryingValue"]
-            and self.balance_sheets[perios_bs]["shortLongTermDebtTotal"]
-            and self.income_statements[period_is]["totalRevenue"]
+            self.balance_sheets.get(perios_bs, {}).get("commonStockSharesOutstanding", None)
+            and self.balance_sheets.get(perios_bs, {}).get("cashAndCashEquivalentsAtCarryingValue", None)
+            and self.balance_sheets.get(perios_bs, {}).get("shortLongTermDebtTotal", None)
+            and self.income_statements.get(period_is, {}).get("totalRevenue", None)
         ):
             market_cap = (
                 current_stock_price

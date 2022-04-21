@@ -74,9 +74,13 @@ class CompanyInputDataHandler:
 
     def _get_price_for_filing_date(self, stock_prices_list, filing_date):
         for idx, item in enumerate(stock_prices_list):
-            if datetime.fromisoformat(item["timestamp"]) == datetime.fromisoformat(filing_date):
+            if datetime.fromisoformat(item["timestamp"]) == datetime.fromisoformat(
+                filing_date
+            ):
                 return stock_prices_list[idx], stock_prices_list[idx + 1]
-            elif datetime.fromisoformat(item["timestamp"]) > datetime.fromisoformat(filing_date):
+            elif datetime.fromisoformat(item["timestamp"]) > datetime.fromisoformat(
+                filing_date
+            ):
                 return stock_prices_list[idx], stock_prices_list[idx]
         return None, None
 
@@ -128,11 +132,15 @@ class CompanyInputDataHandler:
                             self.list_of_input_company = []
                             return None
 
+                    # Fix processing to do only for current period of report
                     fundamental_data_handler = FundamentalDataHandler()
-                    fundamental_data_handler.process_company_fundamental_data(
+                    fundamental_data_handler.process_company_fundamental_data_for_period(
                         company_year_dict["cik"],
                         self.fundamental_data_dict,
                         t_1_obj["adjusted_close"],
+                        metadata["period_of_report"][
+                            :10
+                        ],  # passing only 2016-12-31 from 2016-12-31T00:00:00
                     )
 
                     k_fold_config = self._create_k_fold_config(
@@ -159,7 +167,7 @@ class CompanyInputDataHandler:
                     curr_input_data["k_fold_config"] = k_fold_config
                     curr_input_data[
                         "fundamental_data"
-                    ] = fundamental_data_handler.company_ratios_dict
+                    ] = fundamental_data_handler.company_ratios_period_dict
 
                     self.list_of_input_company.append(curr_input_data)
 

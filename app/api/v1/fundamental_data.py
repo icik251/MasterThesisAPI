@@ -4,7 +4,12 @@ from databases.mongodb.session import get_database_async
 from crud.company_base import get_company_base_async
 
 from schemas.fundamental_data import FundamentalData, ErrorResponseModel, ResponseModel
-from celery_worker import create_fundamental_data
+from schemas.fundamental_data_avg import (
+    FundamentalDataAvg,
+    ErrorResponseModel,
+    ResponseModel,
+)
+from celery_worker import create_fundamental_data, average_fundamental_data
 
 router = APIRouter()
 
@@ -26,3 +31,16 @@ async def add_fundamental_data(
             404,
             "Company base doesn't exist, therefore fundamental data can't be added.",
         )
+
+
+@router.post("/average/", response_description="Calculate Fundamental data average")
+async def add_fundamental_data(
+    fundamental_data_avg: FundamentalDataAvg = Body(...),
+    db: AsyncIOMotorClient = Depends(get_database_async),
+):
+    fundamental_data_avg_dict = fundamental_data_avg.dict()
+
+    average_fundamental_data.delay(
+        fundamental_data_avg_dict["year"], fundamental_data_avg_dict["q"]
+    )
+    return ResponseModel([], "Task added to queue.")

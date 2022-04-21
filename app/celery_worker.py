@@ -13,7 +13,13 @@ from services.utils import load_search_terms, requests_get
 
 from crud.company import add_company, get_company
 from crud.stock_price import add_stock_prices, delete_stock_prices
-from crud.input_data import add_input_data, delete_input_data, get_input_data
+from crud.input_data import (
+    add_input_data,
+    delete_input_data,
+    get_input_data_by_kfold_split_type,
+    get_input_data_by_year_q,
+    update_input_data,
+)
 from crud.fundamental_data import add_fundamental_data, delete_fundamental_data
 
 from databases.mongodb.session import get_database
@@ -404,7 +410,7 @@ def create_model_input_data(
                 dict_input["cik"],
                 dict_input["year"],
                 dict_input["type"],
-                datetime.datetime.fromisoformat(dict_input["period_of_report"]),
+                dict_input["q"],
                 input_data_collection,
             )
 
@@ -435,13 +441,13 @@ def create_scaled_data(k_fold: int):
     storage_collection = os.getenv("STORAGE_COLLECTION")
     input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
 
-    list_of_train_input = get_input_data(
+    list_of_train_input = get_input_data_by_kfold_split_type(
         db=db,
         k_fold=k_fold,
         split_type="train",
         input_data_collection=input_data_collection,
     )
-    list_of_val_input = get_input_data(
+    list_of_val_input = get_input_data_by_kfold_split_type(
         db=db,
         k_fold=k_fold,
         split_type="val",
@@ -586,3 +592,109 @@ def create_fundamental_data(cik: int, ticker: str):
     close_mongo_connection(client)
 
     return f"Successfuly added fundamental data for cik: {cik}"
+
+
+@celery_app.task(name="average_fundamental_data", base=BaseTaskWithRetry)
+def average_fundamental_data(year: int, q: int, difference_type="median"):
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_input_data = get_input_data_by_year_q(
+        db=db, year=year, q=q, input_data_collection=input_data_collection
+    )
+
+    dict_of_fund_data_avg = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+    for input_data in list_of_input_data:
+        for kpi_k, value in input_data["fundamental_data"].items():
+            # Take care of the type
+            res_type = input_data["company_type"].split(";")
+            company_type = res_type[1] if len(res_type) > 1 else res_type[0]
+
+            # change to non_accelerated if smaller
+            company_type = (
+                "non_accelerated_filer"
+                if company_type == "smaller_reporting_company"
+                else company_type
+            )
+
+            # add for all
+            dict_of_fund_data_avg[company_type][kpi_k]["count_all"] += 1
+
+            # add if not on time
+            if not input_data["is_filing_on_time"]:
+                dict_of_fund_data_avg[company_type][kpi_k]["count_not_on_time"] += 1
+                continue
+
+            # add if null
+            if not value:
+                dict_of_fund_data_avg[company_type][kpi_k]["count_null"] += 1
+            else:
+                # add into avg and used
+                dict_of_fund_data_avg[company_type][kpi_k]["count_used"] += 1
+                dict_of_fund_data_avg[company_type][kpi_k]["sum"] += value
+                if dict_of_fund_data_avg[company_type][kpi_k].get("values_list", None):
+                    dict_of_fund_data_avg[company_type][kpi_k]["values_list"].append(
+                        value
+                    )
+                else:
+                    dict_of_fund_data_avg[company_type][kpi_k]["values_list"] = [value]
+
+    # Calculate average and median
+    for filer_type_k, kpi_dict in dict_of_fund_data_avg.items():
+        for kpi_k, info_dict in kpi_dict.items():
+            try:
+                dict_of_fund_data_avg[filer_type_k][kpi_k]["mean"] = (
+                    info_dict["sum"] / info_dict["count_used"]
+                )
+            except ZeroDivisionError:
+                dict_of_fund_data_avg[filer_type_k][kpi_k]["mean"] = None
+
+            dict_of_fund_data_avg[filer_type_k][kpi_k]["median"] = np.median(
+                dict_of_fund_data_avg[company_type][kpi_k]["values_list"]
+            )
+
+    for input_data in list_of_input_data:
+        # Take care of the type
+        res_type = input_data["company_type"].split(";")
+        company_type = res_type[1] if len(res_type) > 1 else res_type[0]
+
+        # change to non_accelerated if smaller
+        company_type = (
+            "non_accelerated_filer"
+            if company_type == "smaller_reporting_company"
+            else company_type
+        )
+
+        dict_of_fund_data_diff = {}
+        for kpi, value in input_data["fundamental_data"].items():
+            curr_kpi_avg = dict_of_fund_data_avg[company_type][kpi][difference_type]
+            if not value or not curr_kpi_avg:
+                dict_of_fund_data_diff[kpi] = None
+                continue
+
+            dict_of_fund_data_diff[kpi] = value - curr_kpi_avg
+
+        # Update for curr input data
+        update_input_data(
+            db,
+            input_data["_id"],
+            {"fundamental_data_avg": dict_of_fund_data_avg},
+            input_data_collection,
+        )
+        update_input_data(
+            db,
+            input_data["_id"],
+            {"fundamental_data_diff": dict_of_fund_data_diff},
+            input_data_collection,
+        )
+
+    close_mongo_connection(client)
+    return (
+        f"Successfuly updating with average fundamental data for year: {year}, q: {q}"
+    )
