@@ -100,6 +100,7 @@ class CompanyInputDataHandler:
         return k_fold_config
 
     def init_prepare_data(self, filing_types_to_process=["10K", "10Q"]):
+        imputed_fundamental_data = {}
         for company_year_dict in self.list_company:
             for quarter in company_year_dict["quarters"]:
                 for metadata in quarter["metadata"]:
@@ -143,6 +144,15 @@ class CompanyInputDataHandler:
                         ],  # passing only 2016-12-31 from 2016-12-31T00:00:00
                     )
 
+                    # Save the past available value for all ratios
+                    for (
+                        ratio_k,
+                        value,
+                    ) in fundamental_data_handler.company_ratios_period_dict.items():
+                        # if a value is available for curr ratio, update
+                        if value:
+                            imputed_fundamental_data[ratio_k] = value
+
                     k_fold_config = self._create_k_fold_config(
                         company_year_dict["year"]
                     )
@@ -168,6 +178,9 @@ class CompanyInputDataHandler:
                     curr_input_data[
                         "fundamental_data"
                     ] = fundamental_data_handler.company_ratios_period_dict
+                    curr_input_data[
+                        "fundamental_data_imputed"
+                    ] = imputed_fundamental_data.copy()
 
                     self.list_of_input_company.append(curr_input_data)
 

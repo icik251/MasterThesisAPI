@@ -11,39 +11,12 @@ class FundamentalDataHandler:
         self.company_ratios_dict = defaultdict(dict)
         self.company_ratios_period_dict = {}
 
-    def calculate_average(self, list_of_fundamental_data):
-        pass
-
     def process_company_fundamental_data_for_period(
         self, cik, fundamental_data_dict, current_stock_price, period
     ):
         self.balance_sheets = fundamental_data_dict["balance_sheets"]
         self.income_statements = fundamental_data_dict["income_statements"]
         self.cash_flows = fundamental_data_dict["cash_flows"]
-
-        # list_of_bs_keys = list(self.balance_sheets.keys())
-        # list_of_is_keys = list(self.income_statements.keys())
-        # list_of_cf_keys = list(self.cash_flows.keys())
-
-        # if period not in list_of_bs_keys:
-        #     print(f"CIK: {cik}, Index not found for period: {period}")
-        #     return
-
-        # idx_of_period_bs = list_of_bs_keys.index(period)
-
-        # # Check for correctness
-        # period_key_bs = list_of_bs_keys[idx_of_period_bs]
-        # period_key_is = list_of_is_keys[idx_of_period_bs]
-        # period_key_cf = list_of_cf_keys[idx_of_period_bs]
-
-        # if (
-        #     period_key_bs != period_key_is
-        #     or period_key_bs != period_key_is
-        #     or period_key_is != period_key_cf
-        # ):
-        #     print(
-        #         f"CIK: {cik}, BS: {period_key_bs} | IS: {period_key_is} | CS {period_key_cf}"
-        #     )
 
         """
         Profitability Ratios
@@ -116,6 +89,7 @@ class FundamentalDataHandler:
             period, period, current_stock_price
         )
 
+    # REDUNDANT and may contain wrong logic
     def process_company_fundamental_data(
         self, cik, fundamental_data_dict, current_stock_price
     ):

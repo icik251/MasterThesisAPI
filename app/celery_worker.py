@@ -403,6 +403,7 @@ def create_model_input_data(
                 mda_paragraphs=dict_input["mda_paragraphs"],
                 risk_paragraphs=dict_input["risk_paragraphs"],
                 fundamental_data=dict_input["fundamental_data"],
+                fundamental_data_imputed=dict_input["fundamental_data_imputed"]
             )
 
             delete_input_data(

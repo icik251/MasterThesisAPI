@@ -33,6 +33,7 @@ class InputData(BaseModel):
     mda_paragraphs: Optional[dict] = {}
     risk_paragraphs: Optional[dict] = {}
     fundamental_data: Optional[dict] = {}
+    fundamental_data_imputed: Optional[dict] = {}
     fundamental_data_avg: Optional[dict] = {}
     fundamental_data_diff: Optional[dict] = {}
 
