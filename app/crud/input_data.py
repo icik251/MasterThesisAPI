@@ -65,6 +65,30 @@ def get_input_data_by_year_q(
 
     return input_data_list
 
+async def get_input_data_by_year_q_async(
+    db: AsyncIOMotorClient,
+    year,
+    q,
+    exclude_without_label=True,
+    use_pydantic=False,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+    input_data_list = []
+
+    query = (
+        {"year": year, "q": q, "label": {"$ne": None}}
+        if exclude_without_label
+        else {"year": year, "q": q}
+    )
+            
+    async for input_data_dict in db[input_data_collection].find(query):
+        if use_pydantic:
+            input_data_list.append(model_input_data.InputData(**input_data_dict))
+        else:
+            input_data_list.append(input_data_dict)
+
+    return input_data_list
+
 
 def update_input_data(
     db: MongoClient,

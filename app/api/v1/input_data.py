@@ -1,12 +1,18 @@
+from typing import Optional
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
-from schemas.scaler import Scaler
+
 from utils import parse_model_to_dict
 from databases.mongodb.session import get_database_async
+
 from crud.company import get_company_async
 from crud.stock_price import get_stock_prices
 from crud.fundamental_data import get_fundamental_data_async
+from crud.input_data import get_input_data_by_year_q_async
+
 from schemas.input_data import InputData, ResponseModel, ErrorResponseModel
+from schemas.scaler import Scaler
+
 from celery_worker import create_model_input_data, create_scaled_data
 
 router = APIRouter()
@@ -32,13 +38,32 @@ async def add_model_input_data(
             stock_prices_list[idx] = parse_model_to_dict(stock_price_model)
         fundamental_data_dict = parse_model_to_dict(fundamental_data_dict)
 
-        create_model_input_data.delay(company_list, stock_prices_list, fundamental_data_dict)
+        create_model_input_data.delay(
+            company_list, stock_prices_list, fundamental_data_dict
+        )
         return ResponseModel([], "Task added to queue.")
     else:
         return ErrorResponseModel(
             "An error occurred.",
             404,
             "Company doesn't exist or stock prices for inflation are not added or fundamental data is not added. Therefore model input data can't be added.",
+        )
+
+
+@router.get("/{year}/{q}", response_description="Get input data for year and quarter")
+async def get_input_data(
+    year: int = 2017,
+    q: int = 1,
+    exclude_without_label: Optional[bool] = True,
+    db: AsyncIOMotorClient = Depends(get_database_async),
+):
+
+    list_of_input_data = await get_input_data_by_year_q_async(db, year, q, exclude_without_label, True)
+    if list_of_input_data:
+        return ResponseModel(list_of_input_data, "Result retrieved")
+    else:
+        return ErrorResponseModel(
+            "An error occurred.", 404, f"No input data for {year}, {q}"
         )
 
 
