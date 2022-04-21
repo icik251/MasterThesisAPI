@@ -33,10 +33,9 @@ async def add_fundamental_data(
         )
 
 
-@router.post("/average/", response_description="Calculate Fundamental data average")
+@router.post("/average_impute/", response_description="Average KPIs and impute where data is missing")
 async def add_fundamental_data(
-    fundamental_data_avg: FundamentalDataAvg = Body(...),
-    db: AsyncIOMotorClient = Depends(get_database_async),
+    fundamental_data_avg: FundamentalDataAvg = Body(...)
 ):
     fundamental_data_avg_dict = fundamental_data_avg.dict()
 

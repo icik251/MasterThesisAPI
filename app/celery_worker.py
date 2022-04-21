@@ -403,7 +403,7 @@ def create_model_input_data(
                 mda_paragraphs=dict_input["mda_paragraphs"],
                 risk_paragraphs=dict_input["risk_paragraphs"],
                 fundamental_data=dict_input["fundamental_data"],
-                fundamental_data_imputed=dict_input["fundamental_data_imputed"]
+                fundamental_data_imputed=dict_input["fundamental_data_imputed"],
             )
 
             delete_input_data(
@@ -656,9 +656,12 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
             except ZeroDivisionError:
                 dict_of_fund_data_avg[filer_type_k][kpi_k]["mean"] = None
 
-            dict_of_fund_data_avg[filer_type_k][kpi_k]["median"] = np.median(
-                dict_of_fund_data_avg[company_type][kpi_k]["values_list"]
-            )
+            if info_dict["count_used"] > 0:
+                dict_of_fund_data_avg[filer_type_k][kpi_k]["median"] = np.median(
+                    dict_of_fund_data_avg[filer_type_k][kpi_k]["values_list"]
+                )
+            else:
+                dict_of_fund_data_avg[filer_type_k][kpi_k]["median"] = None
 
     for input_data in list_of_input_data:
         # Take care of the type
@@ -672,8 +675,18 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
             else company_type
         )
 
-        dict_of_fund_data_diff = {}
+        # Impute missing with the median
         for kpi, value in input_data["fundamental_data"].items():
+            if kpi not in input_data[
+                "fundamental_data_imputed"
+            ].keys() or not input_data["fundamental_data_imputed"].get(kpi_k, None):
+                input_data["fundamental_data_imputed"][kpi] = dict_of_fund_data_avg[
+                    company_type
+                ][kpi][difference_type]
+
+        # Create dict for difference with imputed
+        dict_of_fund_data_diff = {}
+        for kpi, value in input_data["fundamental_data_imputed"].items():
             curr_kpi_avg = dict_of_fund_data_avg[company_type][kpi][difference_type]
             if not value or not curr_kpi_avg:
                 dict_of_fund_data_diff[kpi] = None
@@ -688,10 +701,18 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
             {"fundamental_data_avg": dict_of_fund_data_avg},
             input_data_collection,
         )
+        # Update for difference
         update_input_data(
             db,
             input_data["_id"],
             {"fundamental_data_diff": dict_of_fund_data_diff},
+            input_data_collection,
+        )
+        # Update for imputed
+        update_input_data(
+            db,
+            input_data["_id"],
+            {"fundamental_data_imputed": input_data["fundamental_data_imputed"]},
             input_data_collection,
         )
 
