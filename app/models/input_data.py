@@ -9,6 +9,8 @@ from bson import ObjectId
 class InputData(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     cik: int = Field(...)  # the field thing means it is required
+    sector: Optional[str] = None
+    industry: Optional[str] = None
     year: int = Field(...)
     type: str = Field(...)
     q: int = Field(...)

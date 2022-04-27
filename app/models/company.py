@@ -11,6 +11,8 @@ class Company(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     cik: int = Field(...)  # the field thing means it is required
     name: str = Field(...)
+    sector: Optional[str] = None
+    industry: Optional[str] = None
     ticker: Optional[str] = None
     year: int = Field(..., gt=1990)
     quarters: List[Quarter]

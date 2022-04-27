@@ -136,6 +136,8 @@ def create_company(company_dict: dict):
             cik=company_dict["cik"],
             name=company_dict["name"],
             ticker=company_dict["ticker"],
+            sector=company_dict["sector"],
+            industry=company_dict["industry"],
             year=company_dict["year"],
             quarters=[curr_quarter],
         )
@@ -379,6 +381,8 @@ def create_model_input_data(
         try:
             input_data_obj = InputData(
                 cik=dict_input["cik"],
+                sector=dict_input["sector"],
+                industry=dict_input["industry"],
                 year=dict_input["year"],
                 type=dict_input["type"],
                 q=dict_input["q"],
@@ -500,7 +504,7 @@ def create_scaled_data(k_fold: int):
             "percentage_change_scaled_standard": curr_dict_standard,
         }
         db[input_data_collection].update_one(
-            {"_id": curr_id}, {"$set": update_query}, upsert=False
+            {"_id": curr_id}, {"$set": update_query}, upsert=True
         )
 
     # For validation
@@ -522,7 +526,7 @@ def create_scaled_data(k_fold: int):
             "percentage_change_scaled_standard": curr_dict_standard,
         }
         db[input_data_collection].update_one(
-            {"_id": curr_id}, {"$set": update_query}, upsert=False
+            {"_id": curr_id}, {"$set": update_query}, upsert=True
         )
 
     min_max_scaler_pkl = pickle.dumps(scaler_min_max)
@@ -679,7 +683,7 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
         for kpi, value in input_data["fundamental_data"].items():
             if kpi not in input_data[
                 "fundamental_data_imputed"
-            ].keys() or not input_data["fundamental_data_imputed"].get(kpi_k, None):
+            ].keys() or not input_data["fundamental_data_imputed"].get(kpi, None):
                 input_data["fundamental_data_imputed"][kpi] = dict_of_fund_data_avg[
                     company_type
                 ][kpi][difference_type]

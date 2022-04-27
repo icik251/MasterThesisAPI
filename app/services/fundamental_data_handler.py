@@ -219,6 +219,7 @@ class FundamentalDataHandler:
     """
     # Return Ratios
     def _get_return_on_equity(self, period_bs, period_is):
+        # TODO: Fix if equity or income is not a positive number
         # ROE
         if self.balance_sheets.get(period_bs, {}).get(
             "totalShareholderEquity", None

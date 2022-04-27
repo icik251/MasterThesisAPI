@@ -149,7 +149,7 @@ class CompanyInputDataHandler:
                         ratio_k,
                         value,
                     ) in fundamental_data_handler.company_ratios_period_dict.items():
-                        # if a value is available for curr ratio, update
+                        # if a value is available for KPI, update
                         if value:
                             imputed_fundamental_data[ratio_k] = value
 
@@ -158,6 +158,8 @@ class CompanyInputDataHandler:
                     )
 
                     curr_input_data["cik"] = company_year_dict["cik"]
+                    curr_input_data["sector"] = company_year_dict["sector"]
+                    curr_input_data["industry"] = company_year_dict["industry"]
                     curr_input_data["year"] = company_year_dict["year"]
                     curr_input_data["type"] = metadata["type"]
                     curr_input_data["q"] = quarter["q"]

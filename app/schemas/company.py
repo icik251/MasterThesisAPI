@@ -7,6 +7,8 @@ class Company(BaseModel):
     cik: int = Field(...)
     name: str = Field(...)
     ticker: str = None
+    sector: str = None
+    industry: str = None
     year: int = Field(...)
     quarter: int = Field(...)
     type: Optional[str]
