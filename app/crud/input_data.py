@@ -45,15 +45,15 @@ def get_input_data_by_year_q(
     db: MongoClient,
     year,
     q,
-    exclude_without_label=True,
+    is_used=True,
     use_pydantic=False,
     input_data_collection: str = settings.INPUT_DATA_COLLECTION,
 ):
     input_data_list = []
 
     query = (
-        {"year": year, "q": q, "label": {"$ne": None}}
-        if exclude_without_label
+        {"year": year, "q": q, "is_used": True}
+        if is_used
         else {"year": year, "q": q}
     )
 
@@ -65,22 +65,23 @@ def get_input_data_by_year_q(
 
     return input_data_list
 
+
 async def get_input_data_by_year_q_async(
     db: AsyncIOMotorClient,
     year,
     q,
-    exclude_without_label=True,
+    is_used=True,
     use_pydantic=False,
     input_data_collection: str = settings.INPUT_DATA_COLLECTION,
 ):
     input_data_list = []
 
     query = (
-        {"year": year, "q": q, "label": {"$ne": None}}
-        if exclude_without_label
+        {"year": year, "q": q, "is_used": True}
+        if is_used
         else {"year": year, "q": q}
     )
-            
+
     async for input_data_dict in db[input_data_collection].find(query):
         if use_pydantic:
             input_data_list.append(model_input_data.InputData(**input_data_dict))
@@ -99,7 +100,8 @@ def update_input_data_by_id(
     db[input_data_collection].update_one(
         {"_id": _id}, {"$set": dict_of_new_field}, upsert=False
     )
-    
+
+
 async def update_many_input_data_by_industry(
     db: AsyncIOMotorClient,
     industry: str,
@@ -108,8 +110,10 @@ async def update_many_input_data_by_industry(
 ):
     # list_of_res = []
     db[input_data_collection].update_many(
-        {"industry": industry}, {"$set": dict_of_new_field}, upsert=True)
+        {"industry": industry}, {"$set": dict_of_new_field}, upsert=True
+    )
     return 1
+
 
 async def update_many_input_data_by_year_q(
     db: AsyncIOMotorClient,
@@ -120,8 +124,9 @@ async def update_many_input_data_by_year_q(
 ):
     # list_of_res = []
     db[input_data_collection].update_many(
-        {"year": year, "q": q}, {"$set": dict_of_new_field}, upsert=True)
-        
+        {"year": year, "q": q}, {"$set": dict_of_new_field}, upsert=True
+    )
+
     return 1
 
 

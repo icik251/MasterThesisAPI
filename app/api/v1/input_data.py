@@ -57,11 +57,11 @@ async def add_model_input_data(
 async def get_input_data(
     year: int = 2017,
     q: int = 1,
-    exclude_without_label: Optional[bool] = True,
+    is_used: Optional[bool] = True,
     db: AsyncIOMotorClient = Depends(get_database_async),
 ):
 
-    list_of_input_data = await get_input_data_by_year_q_async(db, year, q, exclude_without_label, True)
+    list_of_input_data = await get_input_data_by_year_q_async(db, year, q, is_used, True)
     if list_of_input_data:
         return ResponseModel(list_of_input_data, "Result retrieved")
     else:
