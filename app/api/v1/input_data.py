@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib import response
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -8,10 +9,12 @@ from databases.mongodb.session import get_database_async
 from crud.company import get_company_async
 from crud.stock_price import get_stock_prices
 from crud.fundamental_data import get_fundamental_data_async
-from crud.input_data import get_input_data_by_year_q_async
+from crud.input_data import get_input_data_by_year_q_async, update_many_input_data_by_industry, update_many_input_data_by_year_q
 
 from schemas.input_data import InputData, ResponseModel, ErrorResponseModel
 from schemas.scaler import Scaler
+
+from models.input_data import UpdateIsIsedInputData
 
 from celery_worker import create_model_input_data, create_scaled_data
 
@@ -72,3 +75,24 @@ async def scale_data(scaler_post: Scaler = Body(...)):
     scaled_dict = scaler_post.dict()
     create_scaled_data.delay(scaled_dict["k_fold"])
     return ResponseModel([], "Task added to queue.")
+
+
+@router.put("/", response_description="Update input data")
+async def update_input_is_used(
+    industry: Optional[str] = None,
+    year: Optional[int] = None, 
+    q: Optional[int] = None,
+    updated_is_used_input_data: UpdateIsIsedInputData = Body(...),
+    db: AsyncIOMotorClient = Depends(get_database_async),
+):  
+    if industry:
+        res_list = await update_many_input_data_by_industry(db, industry, updated_is_used_input_data.dict())
+        return ResponseModel(
+            res_list, f"Succesfully updated for industry {industry}"
+        )
+    elif year and q:
+        res_list = await update_many_input_data_by_year_q(db, year, q, updated_is_used_input_data.dict())
+        return ResponseModel(
+            res_list, f"Succesfully updated for year {year} and quarter {q}"
+        )
+    return ErrorResponseModel("Correct data not provided", 412, "No industry or year and q provided")

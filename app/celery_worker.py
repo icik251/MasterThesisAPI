@@ -18,7 +18,7 @@ from crud.input_data import (
     delete_input_data,
     get_input_data_by_kfold_split_type,
     get_input_data_by_year_q,
-    update_input_data,
+    update_input_data_by_id,
 )
 from crud.fundamental_data import add_fundamental_data, delete_fundamental_data
 
@@ -699,21 +699,21 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
             dict_of_fund_data_diff[kpi] = value - curr_kpi_avg
 
         # Update for curr input data
-        update_input_data(
+        update_input_data_by_id(
             db,
             input_data["_id"],
             {"fundamental_data_avg": dict_of_fund_data_avg},
             input_data_collection,
         )
         # Update for difference
-        update_input_data(
+        update_input_data_by_id(
             db,
             input_data["_id"],
             {"fundamental_data_diff": dict_of_fund_data_diff},
             input_data_collection,
         )
         # Update for imputed
-        update_input_data(
+        update_input_data_by_id(
             db,
             input_data["_id"],
             {"fundamental_data_imputed": input_data["fundamental_data_imputed"]},

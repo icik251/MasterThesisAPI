@@ -31,6 +31,7 @@ class InputData(BaseModel):
     percentage_change: Optional[float] = None
     percentage_change_scaled_min_max: Optional[dict] = {}
     percentage_change_scaled_standard: Optional[dict] = {}
+    is_used: Optional[bool] = True
     k_fold_config: dict = Field(...)
     mda_paragraphs: Optional[dict] = {}
     risk_paragraphs: Optional[dict] = {}
@@ -41,6 +42,14 @@ class InputData(BaseModel):
 
     class Config:
         allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+
+class UpdateIsIsedInputData(BaseModel):
+    is_used: bool
+
+    class Config:
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
 

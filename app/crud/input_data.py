@@ -90,7 +90,7 @@ async def get_input_data_by_year_q_async(
     return input_data_list
 
 
-def update_input_data(
+def update_input_data_by_id(
     db: MongoClient,
     _id: int,
     dict_of_new_field: dict,
@@ -99,6 +99,30 @@ def update_input_data(
     db[input_data_collection].update_one(
         {"_id": _id}, {"$set": dict_of_new_field}, upsert=False
     )
+    
+async def update_many_input_data_by_industry(
+    db: AsyncIOMotorClient,
+    industry: str,
+    dict_of_new_field: dict,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+    # list_of_res = []
+    db[input_data_collection].update_many(
+        {"industry": industry}, {"$set": dict_of_new_field}, upsert=True)
+    return 1
+
+async def update_many_input_data_by_year_q(
+    db: AsyncIOMotorClient,
+    year: int,
+    q: int,
+    dict_of_new_field: dict,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+    # list_of_res = []
+    db[input_data_collection].update_many(
+        {"year": year, "q": q}, {"$set": dict_of_new_field}, upsert=True)
+        
+    return 1
 
 
 def delete_input_data(
