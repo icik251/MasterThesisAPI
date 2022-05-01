@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 # This is what we expect in the POST request for company
-class FundamentalDataAvg(BaseModel):
+class FundamentalDataProcessing(BaseModel):
     year: int = Field(...)
     q: int = Field(...)
     

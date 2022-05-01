@@ -26,8 +26,3 @@ class CompanyFundamentalDataHandler:
                     dict_of_formatted_data[curr_fiscal_data][k] = v
 
         return dict_of_formatted_data
-
-
-# some_obj = CompanyFundamentalDataHanddler()
-# r = requests.get("https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol=AE&apikey=DV3U4RGOYLYSQHN8")
-# some_obj.process_data(r.json()['quarterlyReports'])

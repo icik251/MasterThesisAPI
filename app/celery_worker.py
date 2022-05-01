@@ -4,10 +4,13 @@ import copy
 import json
 import traceback
 
+from bson.objectid import ObjectId
+
 from services import (
     process_filing,
     company_input_data_handler,
     company_fundamental_data_handler,
+    fundamental_data_handler,
 )
 from services.utils import load_search_terms, requests_get
 
@@ -366,7 +369,7 @@ def create_model_input_data(
     company_input_data_handler_obj = company_input_data_handler.CompanyInputDataHandler(
         company_list, stock_prices_list, fundamental_data_dict, df_filings_deadlines
     )
-    company_input_data_handler_obj.logic()
+    company_input_data_handler_obj.init_prepare_logic()
 
     # connect to DB
     client = None
@@ -407,7 +410,9 @@ def create_model_input_data(
                 mda_paragraphs=dict_input["mda_paragraphs"],
                 risk_paragraphs=dict_input["risk_paragraphs"],
                 fundamental_data=dict_input["fundamental_data"],
-                fundamental_data_imputed=dict_input["fundamental_data_imputed"],
+                fundamental_data_imputed_past=dict_input[
+                    "fundamental_data_imputed_past"
+                ],
             )
 
             delete_input_data(
@@ -599,6 +604,52 @@ def create_fundamental_data(cik: int, ticker: str):
     return f"Successfuly added fundamental data for cik: {cik}"
 
 
+@celery_app.task(name="impute_missing_fundamental_data_by_knn", base=BaseTaskWithRetry)
+def impute_missing_fundamental_data_by_knn(year: int, q: int, n_neighbours=1):
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_input_data = get_input_data_by_year_q(
+        db=db, year=year, q=q, input_data_collection=input_data_collection
+    )
+
+    if not list_of_input_data:
+        return f"No data for year {year} q {q}."
+
+    fundamental_data_handler_obj = fundamental_data_handler.FundamentalDataHandler()
+    list_of_problem_industries = []
+    for (
+        curr_id,
+        curr_dict_of_fundamental_data_full,
+    ) in fundamental_data_handler_obj.knn_imputer_logic(
+        list_of_input_data, n_neighbours
+    ):
+        if curr_dict_of_fundamental_data_full:
+            # Update for curr input data
+            update_input_data_by_id(
+                db=db,
+                _id=ObjectId(curr_id),
+                dict_of_new_field={"fundamental_data_imputed_full": curr_dict_of_fundamental_data_full},
+                input_data_collection=input_data_collection,
+            )
+        else:
+            list_of_problem_industries.append(curr_id)
+
+    close_mongo_connection(client)
+    if list_of_problem_industries:
+        return f"Successful KNN imputation for fundamental data for year: {year}, q: {q} | Problematic industries: {', '.join(list_of_problem_industries)}"
+    else:
+        return (
+            f"Successful KNN imputation for fundamental data for year: {year}, q: {q}"
+        )
+
+
 @celery_app.task(name="average_fundamental_data", base=BaseTaskWithRetry)
 def average_fundamental_data(year: int, q: int, difference_type="median"):
     # connect to DB
@@ -682,15 +733,15 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
         # Impute missing with the median
         for kpi, value in input_data["fundamental_data"].items():
             if kpi not in input_data[
-                "fundamental_data_imputed"
-            ].keys() or not input_data["fundamental_data_imputed"].get(kpi, None):
-                input_data["fundamental_data_imputed"][kpi] = dict_of_fund_data_avg[
-                    company_type
-                ][kpi][difference_type]
+                "fundamental_data_imputed_past"
+            ].keys() or not input_data["fundamental_data_imputed_past"].get(kpi, None):
+                input_data["fundamental_data_imputed_past"][
+                    kpi
+                ] = dict_of_fund_data_avg[company_type][kpi][difference_type]
 
         # Create dict for difference with imputed
         dict_of_fund_data_diff = {}
-        for kpi, value in input_data["fundamental_data_imputed"].items():
+        for kpi, value in input_data["fundamental_data_imputed_past"].items():
             curr_kpi_avg = dict_of_fund_data_avg[company_type][kpi][difference_type]
             if not value or not curr_kpi_avg:
                 dict_of_fund_data_diff[kpi] = None
@@ -716,7 +767,11 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
         update_input_data_by_id(
             db,
             input_data["_id"],
-            {"fundamental_data_imputed": input_data["fundamental_data_imputed"]},
+            {
+                "fundamental_data_imputed_past": input_data[
+                    "fundamental_data_imputed_past"
+                ]
+            },
             input_data_collection,
         )
 

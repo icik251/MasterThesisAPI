@@ -181,7 +181,7 @@ class CompanyInputDataHandler:
                         "fundamental_data"
                     ] = fundamental_data_handler.company_ratios_period_dict
                     curr_input_data[
-                        "fundamental_data_imputed"
+                        "fundamental_data_imputed_past"
                     ] = imputed_fundamental_data.copy()
 
                     self.list_of_input_company.append(curr_input_data)
@@ -291,7 +291,7 @@ class CompanyInputDataHandler:
 
         return dict_of_paragraphs
 
-    def logic(self):
+    def init_prepare_logic(self):
         self.init_prepare_data()
         # if company is not skipped because of lacking stock prices like cik:874499
         if self.list_of_input_company:

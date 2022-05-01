@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from schemas.input_data import InputData
 from core import settings
 from models import input_data as model_input_data
+from bson.objectid import ObjectId
 
 
 def add_input_data(
@@ -93,12 +94,13 @@ async def get_input_data_by_year_q_async(
 
 def update_input_data_by_id(
     db: MongoClient,
-    _id: int,
+    _id: ObjectId,
     dict_of_new_field: dict,
+    upsert: bool = False,
     input_data_collection: str = settings.INPUT_DATA_COLLECTION,
 ):
     db[input_data_collection].update_one(
-        {"_id": _id}, {"$set": dict_of_new_field}, upsert=False
+        {"_id": _id}, {"$set": dict_of_new_field}, upsert=upsert
     )
 
 
@@ -125,6 +127,19 @@ async def update_many_input_data_by_year_q(
     # list_of_res = []
     db[input_data_collection].update_many(
         {"year": year, "q": q}, {"$set": dict_of_new_field}, upsert=True
+    )
+
+    return 1
+
+async def update_many_input_data_by_cik(
+    db: AsyncIOMotorClient,
+    cik: int,
+    dict_of_new_field: dict,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+    # list_of_res = []
+    db[input_data_collection].update_many(
+        {"cik": cik}, {"$set": dict_of_new_field}, upsert=True
     )
 
     return 1
