@@ -635,7 +635,9 @@ def impute_missing_fundamental_data_by_knn(year: int, q: int, n_neighbours=1):
             update_input_data_by_id(
                 db=db,
                 _id=ObjectId(curr_id),
-                dict_of_new_field={"fundamental_data_imputed_full": curr_dict_of_fundamental_data_full},
+                dict_of_new_field={
+                    "fundamental_data_imputed_full": curr_dict_of_fundamental_data_full
+                },
                 input_data_collection=input_data_collection,
             )
         else:
@@ -668,16 +670,6 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
     dict_of_fund_data_avg = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
     for input_data in list_of_input_data:
         for kpi_k, value in input_data["fundamental_data"].items():
-            # Take care of the type
-            res_type = input_data["company_type"].split(";")
-            company_type = res_type[1] if len(res_type) > 1 else res_type[0]
-
-            # change to non_accelerated if smaller
-            company_type = (
-                "non_accelerated_filer"
-                if company_type == "smaller_reporting_company"
-                else company_type
-            )
 
             # add for all
             dict_of_fund_data_avg[company_type][kpi_k]["count_all"] += 1

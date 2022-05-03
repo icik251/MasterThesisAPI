@@ -696,3 +696,14 @@ class FundamentalDataHandler:
                         ]
 
                     yield id, dict_of_curr_imputed_full
+            # Else return them one by one
+            else:
+                for id, list_of_values_for_id in list_of_all_for_industry:
+                    dict_of_curr_imputed_full = {}
+
+                    for kpi, idx in initial_kpi_idx_mappper.items():
+                        dict_of_curr_imputed_full[kpi] = list_of_values_for_id[
+                            initial_kpi_idx_mappper[kpi]
+                        ]
+                    yield id, dict_of_curr_imputed_full
+    
