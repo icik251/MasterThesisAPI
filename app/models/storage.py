@@ -12,7 +12,7 @@ class Storage(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     dumped_object: Any = Field(...)
     name: str = Field(...)
-    k_fold: int = Field(...)
+    k_fold: Any = Field(...)
     date_created: datetime = datetime.now()
 
     class Config:

@@ -706,4 +706,56 @@ class FundamentalDataHandler:
                             initial_kpi_idx_mappper[kpi]
                         ]
                     yield id, dict_of_curr_imputed_full
-    
+
+    # Method for difference calculation for a company
+    def calculate_difference_for_company_for_timestamp(
+        self, input_data_t, input_data_t_1, input_data_t_2
+    ):
+        fundamental_data_diff_self_t_1 = {}
+        fundamental_data_diff_self_t_2 = {}
+        fundamental_data_diff_industry_t = {}
+        fundamental_data_diff_industry_t_1 = {}
+        fundamental_data_diff_industry_t_2 = {}
+
+        for kpi, value in input_data_t["fundamental_data_imputed_full"].items():
+            # difference to self
+            diff_self_t_1 = value - input_data_t_1.get(
+                "fundamental_data_imputed_full", {}
+            ).get(kpi, value)
+            diff_self_t_2 = value - input_data_t_2.get(
+                "fundamental_data_imputed_full", {}
+            ).get(kpi, value)
+            # difference to median or mean
+            diff_industry_t = value - input_data_t.get("fundamental_data_avg", {}).get(
+                kpi, {}
+            ).get("median", value)
+            diff_industry_t_1 = input_data_t_1.get(
+                "fundamental_data_imputed_full", {}
+            ).get(kpi, value) - input_data_t_1.get("fundamental_data_avg", {}).get(
+                kpi, {}
+            ).get(
+                "median", value
+            )
+            diff_industry_t_2 = input_data_t_2.get(
+                "fundamental_data_imputed_full", {}
+            ).get(kpi, value) - input_data_t_2.get("fundamental_data_avg", {}).get(
+                kpi, {}
+            ).get(
+                "median", value
+            )
+
+            # Add them to dicts
+            fundamental_data_diff_self_t_1[kpi] = diff_self_t_1
+            fundamental_data_diff_self_t_2[kpi] = diff_self_t_2
+
+            fundamental_data_diff_industry_t[kpi] = diff_industry_t
+            fundamental_data_diff_industry_t_1[kpi] = diff_industry_t_1
+            fundamental_data_diff_industry_t_2[kpi] = diff_industry_t_2
+
+        return [
+            ("fundamental_data_diff_self_t_1", fundamental_data_diff_self_t_1),
+            ("fundamental_data_diff_self_t_2", fundamental_data_diff_self_t_2),
+            ("fundamental_data_diff_industry_t", fundamental_data_diff_industry_t),
+            ("fundamental_data_diff_industry_t_1", fundamental_data_diff_industry_t_1),
+            ("fundamental_data_diff_industry_t_2", fundamental_data_diff_industry_t_2),
+        ]

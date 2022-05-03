@@ -18,10 +18,16 @@ from crud.input_data import (
 
 from schemas.input_data import InputData, ResponseModel, ErrorResponseModel
 from schemas.scaler import Scaler
+from schemas.k_folds import KFolds
 
 from models.input_data import UpdateIsIsedInputData
 
-from celery_worker import create_model_input_data, create_scaled_data
+from celery_worker import (
+    create_model_input_data,
+    create_scaled_data,
+    create_k_folds,
+    create_scaled_data_test_set,
+)
 
 router = APIRouter()
 
@@ -77,10 +83,28 @@ async def get_input_data(
         )
 
 
-@router.post("/scale/", response_description="Scale label data from a certain k-fold")
+@router.post(
+    "/scaling_labels/", response_description="Scale label data from a certain k-fold"
+)
 async def scale_data(scaler_post: Scaler = Body(...)):
     scaled_dict = scaler_post.dict()
     create_scaled_data.delay(scaled_dict["k_fold"])
+    return ResponseModel([], "Task added to queue.")
+
+
+@router.post(
+    "/scaling_labels_test/",
+    response_description="Scale label data for test set using full data",
+)
+async def scale_data_test():
+    create_scaled_data_test_set.delay()
+    return ResponseModel([], "Task added to queue.")
+
+
+@router.post("/k_folds/", response_description="Create k_folds by given config")
+async def k_folds_creation(k_folds_post: KFolds = Body(...)):
+    k_folds_dict = k_folds_post.dict()
+    create_k_folds.delay(k_folds_dict["k_folds_rules"])
     return ResponseModel([], "Task added to queue.")
 
 

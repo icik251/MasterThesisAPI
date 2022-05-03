@@ -39,7 +39,11 @@ class InputData(BaseModel):
     fundamental_data_imputed_past: Optional[dict] = {}
     fundamental_data_imputed_full: Optional[dict] = {}
     fundamental_data_avg: Optional[dict] = {}
-    fundamental_data_diff: Optional[dict] = {}
+    fundamental_data_diff_self_t_1: Optional[dict] = {}
+    fundamental_data_diff_self_t_2: Optional[dict] = {}
+    fundamental_data_diff_industry_t: Optional[dict] = {}
+    fundamental_data_diff_industry_t_1: Optional[dict] = {}
+    fundamental_data_diff_industry_t_2: Optional[dict] = {}
 
     class Config:
         allow_population_by_field_name = True

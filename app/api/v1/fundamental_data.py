@@ -9,7 +9,7 @@ from schemas.fundamental_data_processing import (
     ErrorResponseModel,
     ResponseModel,
 )
-from celery_worker import create_fundamental_data, impute_missing_fundamental_data_by_knn, average_fundamental_data
+from celery_worker import create_fundamental_data, impute_missing_fundamental_data_by_knn, average_fundamental_data, feature_enginnering
 
 router = APIRouter()
 
@@ -41,6 +41,18 @@ async def put_average_fundamental_data(
 
     average_fundamental_data.delay(
         fundamental_data_processing_dict["year"], fundamental_data_processing_dict["q"]
+    )
+    return ResponseModel([], "Task added to queue.")
+
+
+@router.put("/feature_engineering/", response_description="Feature engineering using difference")
+async def put_feature_engineering(
+    fundamental_data: FundamentalData = Body(...)
+):
+    fundamental_data_dict = fundamental_data.dict()
+
+    feature_enginnering.delay(
+        fundamental_data_dict["cik"]
     )
     return ResponseModel([], "Task added to queue.")
 

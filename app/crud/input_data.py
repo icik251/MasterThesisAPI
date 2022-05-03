@@ -16,6 +16,27 @@ def add_input_data(
     new_input_data = db[input_data_collection].find_one({"_id": input_data.inserted_id})
     return new_input_data
 
+def get_all_input_data(db: MongoClient,
+                       is_used=True,
+                        use_pydantic=False,
+                        input_data_collection: str = settings.INPUT_DATA_COLLECTION):
+    
+    query = (
+        {"is_used": True}
+        if is_used
+        else {}
+    )
+
+    input_data_list = []
+    for input_data_dict in db[input_data_collection].find(query):
+        if use_pydantic:
+            input_data_list.append(model_input_data.InputData(**input_data_dict))
+        else:
+            input_data_list.append(input_data_dict)
+
+    return input_data_list
+
+    
 
 def get_input_data_by_kfold_split_type(
     db: MongoClient,
@@ -102,6 +123,28 @@ def update_input_data_by_id(
     db[input_data_collection].update_one(
         {"_id": _id}, {"$set": dict_of_new_field}, upsert=upsert
     )
+    
+def get_input_data_by_cik(
+    db: MongoClient,
+    cik: int,
+    is_used=True,
+    use_pydantic=False,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+    query = (
+        {"cik": cik, "is_used": True}
+        if is_used
+        else {"cik": cik}
+    )
+
+    input_data_list = []
+    for input_data_dict in db[input_data_collection].find(query):
+        if use_pydantic:
+            input_data_list.append(model_input_data.InputData(**input_data_dict))
+        else:
+            input_data_list.append(input_data_dict)
+
+    return input_data_list
 
 
 async def update_many_input_data_by_industry(

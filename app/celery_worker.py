@@ -22,6 +22,8 @@ from crud.input_data import (
     get_input_data_by_kfold_split_type,
     get_input_data_by_year_q,
     update_input_data_by_id,
+    get_input_data_by_cik,
+    get_all_input_data,
 )
 from crud.fundamental_data import add_fundamental_data, delete_fundamental_data
 
@@ -439,6 +441,134 @@ def create_model_input_data(
         return f"Skipping for {company_list[0]['cik']} | Lacking stock prices in the period"
 
 
+@celery_app.task(name="create_scaled_data_test_set", base=BaseTaskWithRetry)
+def create_scaled_data_test_set():
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    storage_collection = os.getenv("STORAGE_COLLECTION")
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_train_input = get_input_data_by_kfold_split_type(
+        db=db,
+        k_fold=1,
+        split_type="train",
+        input_data_collection=input_data_collection,
+    )
+    list_of_val_input = get_input_data_by_kfold_split_type(
+        db=db,
+        k_fold=1,
+        split_type="val",
+        input_data_collection=input_data_collection,
+    )
+
+    list_of_train_input = get_input_data_by_kfold_split_type(
+        db=db,
+        k_fold=1,
+        split_type="train",
+        input_data_collection=input_data_collection,
+    )
+    list_of_train_input = list_of_val_input + list_of_train_input
+
+    list_of_test_input = get_input_data_by_kfold_split_type(
+        db=db,
+        k_fold=1,
+        split_type="test",
+        input_data_collection=input_data_collection,
+    )
+
+    list_of_train_perc_change = [
+        x["percentage_change"] for x in list_of_train_input
+    ]
+    list_of_test_perc_change = [x["percentage_change"] for x in list_of_test_input]
+
+    scaler_min_max = MinMaxScaler()
+    scaler_standard = StandardScaler()
+
+    # Fit for both scalers
+    scaler_min_max.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
+    scaler_standard.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
+
+    # Transform for both scalers
+    list_of_train_perc_change_scaled_min_max = scaler_min_max.transform(
+        np.array(list_of_train_perc_change).reshape(-1, 1)
+    )
+    list_of_train_perc_change_scaled_standard = scaler_standard.transform(
+        np.array(list_of_train_perc_change).reshape(-1, 1)
+    )
+
+    list_of_test_perc_change_scaled_min_max = scaler_min_max.transform(
+        np.array(list_of_test_perc_change).reshape(-1, 1)
+    )
+    list_of_test_perc_change_scaled_standard = scaler_standard.transform(
+        np.array(list_of_test_perc_change).reshape(-1, 1)
+    )
+
+    # For training
+    for idx, (min_max_scaled, standard_scaled) in enumerate(
+        zip(
+            list_of_train_perc_change_scaled_min_max,
+            list_of_train_perc_change_scaled_standard,
+        )
+    ):
+        curr_id = list_of_train_input[idx]["_id"]
+        curr_dict_min_max = list_of_train_input[idx]["percentage_change_scaled_min_max"]
+        curr_dict_standard = list_of_train_input[idx][
+            "percentage_change_scaled_standard"
+        ]
+
+        curr_dict_min_max["full"] = min_max_scaled[0]
+        curr_dict_standard["full"] = standard_scaled[0]
+        update_query = {
+            "percentage_change_scaled_min_max": curr_dict_min_max,
+            "percentage_change_scaled_standard": curr_dict_standard,
+        }
+        db[input_data_collection].update_one(
+            {"_id": curr_id}, {"$set": update_query}, upsert=True
+        )
+
+    # For testing
+    for idx, (min_max_scaled, standard_scaled) in enumerate(
+        zip(
+            list_of_test_perc_change_scaled_min_max,
+            list_of_test_perc_change_scaled_standard,
+        )
+    ):
+        curr_id = list_of_test_input[idx]["_id"]
+        curr_dict_min_max = list_of_test_input[idx]["percentage_change_scaled_min_max"]
+        curr_dict_standard = list_of_test_input[idx]["percentage_change_scaled_standard"]
+
+        curr_dict_min_max["full"] = min_max_scaled[0]
+        curr_dict_standard["full"] = standard_scaled[0]
+
+        update_query = {
+            "percentage_change_scaled_min_max": curr_dict_min_max,
+            "percentage_change_scaled_standard": curr_dict_standard,
+        }
+        db[input_data_collection].update_one(
+            {"_id": curr_id}, {"$set": update_query}, upsert=True
+        )
+
+    min_max_scaler_pkl = pickle.dumps(scaler_min_max)
+    standard_scaler_pkl = pickle.dumps(scaler_standard)
+    storage_min_max = Storage(
+        dumped_object=min_max_scaler_pkl, name="min_max", k_fold="full"
+    )
+    storage_standard = Storage(
+        dumped_object=standard_scaler_pkl, name="standard", k_fold="full"
+    )
+
+    db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
+    db[storage_collection].insert_one(storage_standard.dict(by_alias=True))
+
+    close_mongo_connection(client)
+    return f"Success for k-fold full | Scalers saved and data updated"
+
+
 @celery_app.task(name="create_scaled_data", base=BaseTaskWithRetry)
 def create_scaled_data(k_fold: int):
     # connect to DB
@@ -684,11 +814,6 @@ def average_fundamental_data(year: int, q: int):
                 ] += 1
                 continue
 
-            # # add if null
-            # if not value:
-            #     dict_of_fund_data_avg[industry][kpi_k]["count_null"] += 1
-            # else:
-            # add into avg and used
             dict_of_fund_data_avg[input_data["industry"]][kpi_k]["count_used"] += 1
             dict_of_fund_data_avg[input_data["industry"]][kpi_k]["sum"] += value
             if dict_of_fund_data_avg[input_data["industry"]][kpi_k].get(
@@ -719,38 +844,6 @@ def average_fundamental_data(year: int, q: int):
             else:
                 dict_of_fund_data_avg[industry][kpi_k]["median"] = None
 
-    # Logic for calculating difference
-    # for input_data in list_of_input_data:
-    #     # Take care of the type
-    #     res_type = input_data["company_type"].split(";")
-    #     industry = res_type[1] if len(res_type) > 1 else res_type[0]
-
-    #     # change to non_accelerated if smaller
-    #     industry = (
-    #         "non_accelerated_filer"
-    #         if industry == "smaller_reporting_company"
-    #         else industry
-    #     )
-
-    #     # Impute missing with the median
-    #     for kpi, value in input_data["fundamental_data"].items():
-    #         if kpi not in input_data[
-    #             "fundamental_data_imputed_past"
-    #         ].keys() or not input_data["fundamental_data_imputed_past"].get(kpi, None):
-    #             input_data["fundamental_data_imputed_past"][
-    #                 kpi
-    #             ] = dict_of_fund_data_avg[industry][kpi][difference_type]
-
-    #     # Create dict for difference with imputed
-    #     dict_of_fund_data_diff = {}
-    #     for kpi, value in input_data["fundamental_data_imputed_past"].items():
-    #         curr_kpi_avg = dict_of_fund_data_avg[industry][kpi][difference_type]
-    #         if not value or not curr_kpi_avg:
-    #             dict_of_fund_data_diff[kpi] = None
-    #             continue
-
-    #         dict_of_fund_data_diff[kpi] = value - curr_kpi_avg
-
     for input_data in list_of_input_data:
         curr_industry_dict_of_average = dict_of_fund_data_avg[input_data["industry"]]
         # Update for curr input data
@@ -760,13 +853,90 @@ def average_fundamental_data(year: int, q: int):
             dict_of_new_field={"fundamental_data_avg": curr_industry_dict_of_average},
             input_data_collection=input_data_collection,
         )
-        # Update for difference
-        # update_input_data_by_id(
-        #     db,
-        #     input_data["_id"],
-        #     {"fundamental_data_diff": dict_of_fund_data_diff},
-        #     input_data_collection,
-        # )
 
     close_mongo_connection(client)
     return f"Successfuly calculating average and median fundamental data for year: {year}, q: {q}"
+
+
+@celery_app.task(name="feature_enginnering", base=BaseTaskWithRetry)
+def feature_enginnering(cik: int):
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_cik_input_data = get_input_data_by_cik(
+        db=db, cik=cik, input_data_collection=input_data_collection
+    )
+
+    if not list_of_cik_input_data:
+        return f"No data for cik {cik}."
+
+    fundamental_data_handler_obj = fundamental_data_handler.FundamentalDataHandler()
+
+    for idx in range(len(list_of_cik_input_data)):
+        curr_id = list_of_cik_input_data[idx]["_id"]
+        if idx == 0:
+            input_data_t = list_of_cik_input_data[idx]
+            input_data_t_1 = {}
+            input_data_t_2 = {}
+        elif idx == 1:
+            input_data_t = list_of_cik_input_data[idx]
+            input_data_t_1 = list_of_cik_input_data[idx - 1]
+            input_data_t_2 = {}
+        else:
+            input_data_t = list_of_cik_input_data[idx]
+            input_data_t_1 = list_of_cik_input_data[idx - 1]
+            input_data_t_2 = list_of_cik_input_data[idx - 1]
+
+        list_of_res_dicts = (
+            fundamental_data_handler_obj.calculate_difference_for_company_for_timestamp(
+                input_data_t, input_data_t_1, input_data_t_2
+            )
+        )
+
+        for name, diff_dict in list_of_res_dicts:
+            update_input_data_by_id(
+                db=db,
+                _id=curr_id,
+                dict_of_new_field={name: diff_dict},
+                input_data_collection=input_data_collection,
+            )
+
+    close_mongo_connection(client)
+    return f"Successfuly feature engineering for cik {cik}"
+
+
+@celery_app.task(name="k_folds_config", base=BaseTaskWithRetry)
+def create_k_folds(k_folds_rules: dict):
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_input_data = get_all_input_data(
+        db=db, is_used=True, input_data_collection=input_data_collection
+    )
+    k_folds = [1, 2, 3]
+    for input_data in list_of_input_data:
+        k_fold_config = {}
+        for k in k_folds:
+            split_type = k_folds_rules[str(input_data["year"])][str(k)]
+            k_fold_config[str(k)] = split_type
+
+        update_input_data_by_id(
+            db=db,
+            _id=input_data["_id"],
+            dict_of_new_field={"k_fold_config": k_fold_config},
+            input_data_collection=input_data_collection,
+        )
+
+    close_mongo_connection(client)
+    return f"Successfuly creation of k_folds"

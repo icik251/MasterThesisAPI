@@ -21,14 +21,15 @@ class CompanyInputDataHandler:
         self.df_filings_deadlines = df_filings_deadlines
         self.list_of_input_company = []
 
-        self.k_folds = [1, 2, 3, 4]
-        self.k_fold_rules = {
-            2017: {1: "val", 2: "train", 3: "train", 4: "train"},
-            2018: {1: "train", 2: "val", 3: "train", 4: "train"},
-            2019: {1: "train", 2: "train", 3: "val", 4: "train"},
-            2020: {1: "train", 2: "train", 3: "train", 4: "val"},
-            2021: {1: "test", 2: "test", 3: "test", 4: "test"},
-        }
+        # Old logic for K-Folds
+        # self.k_folds = [1, 2, 3, 4]
+        # self.k_fold_rules = {
+        #     2017: {1: "val", 2: "train", 3: "train", 4: "train"},
+        #     2018: {1: "train", 2: "val", 3: "train", 4: "train"},
+        #     2019: {1: "train", 2: "train", 3: "val", 4: "train"},
+        #     2020: {1: "train", 2: "train", 3: "train", 4: "val"},
+        #     2021: {1: "test", 2: "test", 3: "test", 4: "test"},
+        # }
 
         # basically if we are 2017, we indicate that for K-FOLD 1, this is used for val
         # for K-FOLD 2, this is used for train, etc.
@@ -92,12 +93,12 @@ class CompanyInputDataHandler:
                 return stock_prices_list[idx], stock_prices_list[idx]
         return None, None
 
-    def _create_k_fold_config(self, year):
-        k_fold_config = {}
-        for k in self.k_folds:
-            split_type = self.k_fold_rules[year][k]
-            k_fold_config[str(k)] = split_type
-        return k_fold_config
+    # def _create_k_fold_config(self, year):
+    #     k_fold_config = {}
+    #     for k in self.k_folds:
+    #         split_type = self.k_fold_rules[year][k]
+    #         k_fold_config[str(k)] = split_type
+    #     return k_fold_config
 
     def init_prepare_data(self, filing_types_to_process=["10K", "10Q"]):
         imputed_fundamental_data = {}
@@ -153,9 +154,9 @@ class CompanyInputDataHandler:
                         if value:
                             imputed_fundamental_data[ratio_k] = value
 
-                    k_fold_config = self._create_k_fold_config(
-                        company_year_dict["year"]
-                    )
+                    # k_fold_config = self._create_k_fold_config(
+                    #     company_year_dict["year"]
+                    # )
 
                     curr_input_data["cik"] = company_year_dict["cik"]
                     curr_input_data["sector"] = company_year_dict["sector"]
@@ -176,7 +177,7 @@ class CompanyInputDataHandler:
                     curr_input_data["close_price_next_date"] = t_1_obj["timestamp"]
                     curr_input_data["close_price_next_day"] = t_1_obj["adjusted_close"]
                     curr_input_data["volume_next_day"] = t_1_obj["volume"]
-                    curr_input_data["k_fold_config"] = k_fold_config
+                    curr_input_data["k_fold_config"] = {}
                     curr_input_data[
                         "fundamental_data"
                     ] = fundamental_data_handler.company_ratios_period_dict
