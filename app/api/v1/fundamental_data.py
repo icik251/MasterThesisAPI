@@ -9,7 +9,7 @@ from schemas.fundamental_data_processing import (
     ErrorResponseModel,
     ResponseModel,
 )
-from celery_worker import create_fundamental_data, impute_missing_fundamental_data_by_knn
+from celery_worker import create_fundamental_data, impute_missing_fundamental_data_by_knn, average_fundamental_data
 
 router = APIRouter()
 
@@ -33,16 +33,17 @@ async def add_fundamental_data(
         )
 
 
-# @router.post("/average_impute/", response_description="Average KPIs and impute where data is missing")
-# async def add_fundamental_data(
-#     fundamental_data_avg: FundamentalDataAvg = Body(...)
-# ):
-#     fundamental_data_avg_dict = fundamental_data_avg.dict()
+@router.put("/average/", response_description="Average KPIs and impute where data is missing")
+async def put_average_fundamental_data(
+    fundamental_data_processing: FundamentalDataProcessing = Body(...)
+):
+    fundamental_data_processing_dict = fundamental_data_processing.dict()
 
-#     average_fundamental_data.delay(
-#         fundamental_data_avg_dict["year"], fundamental_data_avg_dict["q"]
-#     )
-#     return ResponseModel([], "Task added to queue.")
+    average_fundamental_data.delay(
+        fundamental_data_processing_dict["year"], fundamental_data_processing_dict["q"]
+    )
+    return ResponseModel([], "Task added to queue.")
+
 
 @router.put("/impute_knn/", response_description="Fill missing values for fundamental data using KNN")
 async def impute_fundamental_data(

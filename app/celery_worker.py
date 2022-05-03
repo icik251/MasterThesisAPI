@@ -653,7 +653,7 @@ def impute_missing_fundamental_data_by_knn(year: int, q: int, n_neighbours=1):
 
 
 @celery_app.task(name="average_fundamental_data", base=BaseTaskWithRetry)
-def average_fundamental_data(year: int, q: int, difference_type="median"):
+def average_fundamental_data(year: int, q: int):
     # connect to DB
     client = None
     while not client:
@@ -667,107 +667,106 @@ def average_fundamental_data(year: int, q: int, difference_type="median"):
         db=db, year=year, q=q, input_data_collection=input_data_collection
     )
 
+    if not list_of_input_data:
+        return f"No data for year {year} q {q}."
+
     dict_of_fund_data_avg = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
     for input_data in list_of_input_data:
-        for kpi_k, value in input_data["fundamental_data"].items():
+        for kpi_k, value in input_data["fundamental_data_imputed_full"].items():
 
             # add for all
-            dict_of_fund_data_avg[company_type][kpi_k]["count_all"] += 1
+            dict_of_fund_data_avg[input_data["industry"]][kpi_k]["count_all"] += 1
 
             # add if not on time
             if not input_data["is_filing_on_time"]:
-                dict_of_fund_data_avg[company_type][kpi_k]["count_not_on_time"] += 1
+                dict_of_fund_data_avg[input_data["industry"]][kpi_k][
+                    "count_not_on_time"
+                ] += 1
                 continue
 
-            # add if null
-            if not value:
-                dict_of_fund_data_avg[company_type][kpi_k]["count_null"] += 1
+            # # add if null
+            # if not value:
+            #     dict_of_fund_data_avg[industry][kpi_k]["count_null"] += 1
+            # else:
+            # add into avg and used
+            dict_of_fund_data_avg[input_data["industry"]][kpi_k]["count_used"] += 1
+            dict_of_fund_data_avg[input_data["industry"]][kpi_k]["sum"] += value
+            if dict_of_fund_data_avg[input_data["industry"]][kpi_k].get(
+                "values_list", None
+            ):
+                dict_of_fund_data_avg[input_data["industry"]][kpi_k][
+                    "values_list"
+                ].append(value)
             else:
-                # add into avg and used
-                dict_of_fund_data_avg[company_type][kpi_k]["count_used"] += 1
-                dict_of_fund_data_avg[company_type][kpi_k]["sum"] += value
-                if dict_of_fund_data_avg[company_type][kpi_k].get("values_list", None):
-                    dict_of_fund_data_avg[company_type][kpi_k]["values_list"].append(
-                        value
-                    )
-                else:
-                    dict_of_fund_data_avg[company_type][kpi_k]["values_list"] = [value]
+                dict_of_fund_data_avg[input_data["industry"]][kpi_k]["values_list"] = [
+                    value
+                ]
 
     # Calculate average and median
-    for filer_type_k, kpi_dict in dict_of_fund_data_avg.items():
+    for industry, kpi_dict in dict_of_fund_data_avg.items():
         for kpi_k, info_dict in kpi_dict.items():
             try:
-                dict_of_fund_data_avg[filer_type_k][kpi_k]["mean"] = (
+                dict_of_fund_data_avg[industry][kpi_k]["mean"] = (
                     info_dict["sum"] / info_dict["count_used"]
                 )
             except ZeroDivisionError:
-                dict_of_fund_data_avg[filer_type_k][kpi_k]["mean"] = None
+                dict_of_fund_data_avg[industry][kpi_k]["mean"] = None
 
             if info_dict["count_used"] > 0:
-                dict_of_fund_data_avg[filer_type_k][kpi_k]["median"] = np.median(
-                    dict_of_fund_data_avg[filer_type_k][kpi_k]["values_list"]
+                dict_of_fund_data_avg[industry][kpi_k]["median"] = np.median(
+                    dict_of_fund_data_avg[industry][kpi_k]["values_list"]
                 )
             else:
-                dict_of_fund_data_avg[filer_type_k][kpi_k]["median"] = None
+                dict_of_fund_data_avg[industry][kpi_k]["median"] = None
+
+    # Logic for calculating difference
+    # for input_data in list_of_input_data:
+    #     # Take care of the type
+    #     res_type = input_data["company_type"].split(";")
+    #     industry = res_type[1] if len(res_type) > 1 else res_type[0]
+
+    #     # change to non_accelerated if smaller
+    #     industry = (
+    #         "non_accelerated_filer"
+    #         if industry == "smaller_reporting_company"
+    #         else industry
+    #     )
+
+    #     # Impute missing with the median
+    #     for kpi, value in input_data["fundamental_data"].items():
+    #         if kpi not in input_data[
+    #             "fundamental_data_imputed_past"
+    #         ].keys() or not input_data["fundamental_data_imputed_past"].get(kpi, None):
+    #             input_data["fundamental_data_imputed_past"][
+    #                 kpi
+    #             ] = dict_of_fund_data_avg[industry][kpi][difference_type]
+
+    #     # Create dict for difference with imputed
+    #     dict_of_fund_data_diff = {}
+    #     for kpi, value in input_data["fundamental_data_imputed_past"].items():
+    #         curr_kpi_avg = dict_of_fund_data_avg[industry][kpi][difference_type]
+    #         if not value or not curr_kpi_avg:
+    #             dict_of_fund_data_diff[kpi] = None
+    #             continue
+
+    #         dict_of_fund_data_diff[kpi] = value - curr_kpi_avg
 
     for input_data in list_of_input_data:
-        # Take care of the type
-        res_type = input_data["company_type"].split(";")
-        company_type = res_type[1] if len(res_type) > 1 else res_type[0]
-
-        # change to non_accelerated if smaller
-        company_type = (
-            "non_accelerated_filer"
-            if company_type == "smaller_reporting_company"
-            else company_type
-        )
-
-        # Impute missing with the median
-        for kpi, value in input_data["fundamental_data"].items():
-            if kpi not in input_data[
-                "fundamental_data_imputed_past"
-            ].keys() or not input_data["fundamental_data_imputed_past"].get(kpi, None):
-                input_data["fundamental_data_imputed_past"][
-                    kpi
-                ] = dict_of_fund_data_avg[company_type][kpi][difference_type]
-
-        # Create dict for difference with imputed
-        dict_of_fund_data_diff = {}
-        for kpi, value in input_data["fundamental_data_imputed_past"].items():
-            curr_kpi_avg = dict_of_fund_data_avg[company_type][kpi][difference_type]
-            if not value or not curr_kpi_avg:
-                dict_of_fund_data_diff[kpi] = None
-                continue
-
-            dict_of_fund_data_diff[kpi] = value - curr_kpi_avg
-
+        curr_industry_dict_of_average = dict_of_fund_data_avg[input_data["industry"]]
         # Update for curr input data
         update_input_data_by_id(
-            db,
-            input_data["_id"],
-            {"fundamental_data_avg": dict_of_fund_data_avg},
-            input_data_collection,
+            db=db,
+            _id=input_data["_id"],
+            dict_of_new_field={"fundamental_data_avg": curr_industry_dict_of_average},
+            input_data_collection=input_data_collection,
         )
         # Update for difference
-        update_input_data_by_id(
-            db,
-            input_data["_id"],
-            {"fundamental_data_diff": dict_of_fund_data_diff},
-            input_data_collection,
-        )
-        # Update for imputed
-        update_input_data_by_id(
-            db,
-            input_data["_id"],
-            {
-                "fundamental_data_imputed_past": input_data[
-                    "fundamental_data_imputed_past"
-                ]
-            },
-            input_data_collection,
-        )
+        # update_input_data_by_id(
+        #     db,
+        #     input_data["_id"],
+        #     {"fundamental_data_diff": dict_of_fund_data_diff},
+        #     input_data_collection,
+        # )
 
     close_mongo_connection(client)
-    return (
-        f"Successfuly updating with average fundamental data for year: {year}, q: {q}"
-    )
+    return f"Successfuly calculating average and median fundamental data for year: {year}, q: {q}"
