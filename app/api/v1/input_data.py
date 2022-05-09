@@ -1,9 +1,11 @@
+from collections import defaultdict
 from typing import Optional
 from urllib import response
 from fastapi import APIRouter, Body, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from utils import parse_model_to_dict
+from bson.objectid import ObjectId
+from utils import parse_model_to_dict, verify_fundamental_data_features
 from databases.mongodb.session import get_database_async
 
 from crud.company import get_company_async
@@ -14,6 +16,8 @@ from crud.input_data import (
     update_many_input_data_by_industry,
     update_many_input_data_by_year_q,
     update_many_input_data_by_cik,
+    async_get_all_input_data,
+    async_update_input_data_by_id,
 )
 
 from schemas.input_data import InputData, ResponseModel, ErrorResponseModel
@@ -114,6 +118,7 @@ async def update_input_is_used(
     year: Optional[int] = None,
     q: Optional[int] = None,
     cik: Optional[int] = None,
+    _id: Optional[str] = None,
     updated_is_used_input_data: UpdateIsIsedInputData = Body(...),
     db: AsyncIOMotorClient = Depends(get_database_async),
 ):
@@ -134,6 +139,48 @@ async def update_input_is_used(
             db, cik, updated_is_used_input_data.dict()
         )
         return ResponseModel(res_list, f"Succesfully updated for cik {cik}")
+    elif _id:
+        res = await async_update_input_data_by_id(
+            db, ObjectId(_id), updated_is_used_input_data.dict()
+        )
+        return ResponseModel(res, f"Succesfully updated for _id {_id}")
+
+    elif not industry and not year and not q and not cik and not _id:
+        # Go through all input data and decide which to make is_used: "False"
+        list_of_input_data = await async_get_all_input_data(db)
+
+        dict_of_lists = defaultdict(list)
+        list_of_features_dicts = [
+            "fundamental_data_imputed_full",
+            "fundamental_data_diff_self_t_1",
+            "fundamental_data_diff_self_t_2",
+            "fundamental_data_diff_industry_t",
+            "fundamental_data_diff_industry_t_1",
+            "fundamental_data_diff_industry_t_2",
+        ]
+        for input_data in list_of_input_data:
+            for features_dict in list_of_features_dicts:
+                not_size, not_zeros = verify_fundamental_data_features(
+                    input_data[features_dict]
+                )
+                if not not_size or not not_zeros:
+                    if str(input_data["_id"]) not in dict_of_lists.keys():
+                        async_update_input_data_by_id(
+                            db, input_data["_id"], updated_is_used_input_data.dict()
+                        )
+
+                    dict_of_lists[str(input_data["_id"])].append(
+                        {features_dict: (not_size, not_zeros)}
+                    )
+            if (not input_data["label"] or not input_data["percentage_change"]) and str(
+                input_data["_id"]
+            ) not in dict_of_lists.keys():
+                async_update_input_data_by_id(
+                    db, input_data["_id"], updated_is_used_input_data.dict()
+                )
+
+        return ResponseModel(dict_of_lists, f"Succesfully updated for all")
+
     return ErrorResponseModel(
         "Correct data not provided", 412, "No industry or year and q or cik provided"
     )

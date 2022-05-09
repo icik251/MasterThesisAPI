@@ -34,7 +34,9 @@ class InputData(BaseModel):
     is_used: Optional[bool] = True
     k_fold_config: dict = Field(...)
     mda_paragraphs: Optional[dict] = {}
+    mda_sentences: Optional[list] = []
     risk_paragraphs: Optional[dict] = {}
+    risk_sentences: Optional[list] = []
     fundamental_data: Optional[dict] = {}
     fundamental_data_imputed_past: Optional[dict] = {}
     fundamental_data_imputed_full: Optional[dict] = {}

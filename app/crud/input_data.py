@@ -36,6 +36,25 @@ def get_all_input_data(db: MongoClient,
 
     return input_data_list
 
+async def async_get_all_input_data(db: AsyncIOMotorClient,
+                       is_used=True,
+                        use_pydantic=False,
+                        input_data_collection: str = settings.INPUT_DATA_COLLECTION):
+    
+    query = (
+        {"is_used": True}
+        if is_used
+        else {}
+    )
+    list_of_input_data = []
+    async for input_data_dict in db[input_data_collection].find(query):
+        if use_pydantic:
+            list_of_input_data.append(model_input_data.InputData(**input_data_dict))
+        else:
+            list_of_input_data.append(input_data_dict)
+            
+    return list_of_input_data
+
     
 
 def get_input_data_by_kfold_split_type(
@@ -124,6 +143,18 @@ def update_input_data_by_id(
         {"_id": _id}, {"$set": dict_of_new_field}, upsert=upsert
     )
     
+async def async_update_input_data_by_id(
+    db: AsyncIOMotorClient,
+    _id: ObjectId,
+    dict_of_new_field: dict,
+    upsert: bool = False,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+    db[input_data_collection].update_one(
+        {"_id": _id}, {"$set": dict_of_new_field}, upsert=upsert
+    )
+    return 1
+    
 def get_input_data_by_cik(
     db: MongoClient,
     cik: int,
@@ -153,7 +184,6 @@ async def update_many_input_data_by_industry(
     dict_of_new_field: dict,
     input_data_collection: str = settings.INPUT_DATA_COLLECTION,
 ):
-    # list_of_res = []
     db[input_data_collection].update_many(
         {"industry": industry}, {"$set": dict_of_new_field}, upsert=True
     )

@@ -5,7 +5,10 @@ from .fundamental_data_handler import FundamentalDataHandler
 import pandas as pd
 import json
 import requests
+from nltk import tokenize
+import nltk
 
+nltk.download('punkt')
 
 class CompanyInputDataHandler:
     def __init__(
@@ -36,8 +39,11 @@ class CompanyInputDataHandler:
         # Example for 2017
         # self.k_fold_config_example = {1: "val", 2: "train", 3: "train", 4: "train"}
 
-    def _is_filing_on_time(self, filing_type, quarter, company_type, filing_date):
+    def _is_filing_on_time(self, filing_type, quarter, company_type, filing_date, past_company_type):
         # check if company_type was modified
+        if not company_type:
+            company_type = past_company_type
+            
         res_type = company_type.split(";")
         company_type = res_type[1] if len(res_type) > 1 else res_type[0]
 
@@ -73,6 +79,9 @@ class CompanyInputDataHandler:
             return False, None
         return True, deadline_datetime
 
+    def _days_between(self, d1, d2):
+        return abs((d2 - d1).days)
+
     def _get_price_for_filing_date(self, stock_prices_list, filing_date):
         for idx, item in enumerate(stock_prices_list):
             if datetime.fromisoformat(item["timestamp"]) == datetime.fromisoformat(
@@ -81,8 +90,12 @@ class CompanyInputDataHandler:
                 return stock_prices_list[idx], stock_prices_list[idx + 1]
             elif datetime.fromisoformat(item["timestamp"]) > datetime.fromisoformat(
                 filing_date
-            ):
-                return stock_prices_list[idx], stock_prices_list[idx]
+            ):  
+                # Check the days difference, if it is more than a week, abandon company
+                if self._days_between(datetime.fromisoformat(item["timestamp"]), datetime.fromisoformat(filing_date)) > 7:
+                    return None, None
+                else:
+                    return stock_prices_list[idx], stock_prices_list[idx]
         return None, None
 
     def _get_price_for_filing_deadline_date(self, stock_prices_list, deadline_datetime):
@@ -90,7 +103,11 @@ class CompanyInputDataHandler:
             if datetime.fromisoformat(item["timestamp"]) == deadline_datetime:
                 return stock_prices_list[idx], stock_prices_list[idx + 1]
             elif datetime.fromisoformat(item["timestamp"]) > deadline_datetime:
-                return stock_prices_list[idx], stock_prices_list[idx]
+                # Check the days difference, if it is more than a week, abandon company
+                if self._days_between(datetime.fromisoformat(item["timestamp"]), deadline_datetime) > 7:
+                    return None, None
+                else:
+                    return stock_prices_list[idx], stock_prices_list[idx]
         return None, None
 
     # def _create_k_fold_config(self, year):
@@ -102,6 +119,7 @@ class CompanyInputDataHandler:
 
     def init_prepare_data(self, filing_types_to_process=["10K", "10Q"]):
         imputed_fundamental_data = {}
+        past_company_type = None
         for company_year_dict in self.list_company:
             for quarter in company_year_dict["quarters"]:
                 for metadata in quarter["metadata"]:
@@ -115,7 +133,9 @@ class CompanyInputDataHandler:
                         quarter["q"],
                         metadata["company_type"],
                         metadata["filing_date"],
+                        past_company_type
                     )
+                    past_company_type = metadata["company_type"]
 
                     if not filing_on_time:
                         # if filing is not on time, we take the price after it is filed
@@ -123,16 +143,18 @@ class CompanyInputDataHandler:
                             self.list_inflation_prices, metadata["filing_date"]
                         )
                         if not t_obj and not t_1_obj:
-                            self.list_of_input_company = []
-                            return None
+                            # self.list_of_input_company = []
+                            # return None
+                            continue
                     else:
                         # if it is on time, we take the price of the deadline
                         t_obj, t_1_obj = self._get_price_for_filing_deadline_date(
                             self.list_inflation_prices, deadline_datetime
                         )
                         if not t_obj and not t_1_obj:
-                            self.list_of_input_company = []
-                            return None
+                            # self.list_of_input_company = []
+                            # return None
+                            continue
 
                     # Fix processing to do only for current period of report
                     fundamental_data_handler = FundamentalDataHandler()
@@ -228,18 +250,32 @@ class CompanyInputDataHandler:
                 mda_section_splitted = item["mda_section"].split("\n")
                 dict_of_paragraphs_mda = self.reformat_section(mda_section_splitted)
                 item["mda_paragraphs"] = dict_of_paragraphs_mda
+                
+                list_of_sentences = []
+                for _, paragaraph_text in dict_of_paragraphs_mda.items():
+                    list_of_sentences += tokenize.sent_tokenize(paragaraph_text)
+                    
+                item["mda_sentences"] = list_of_sentences
             except Exception as e:
                 print(traceback.format_exc())
                 item["mda_paragraphs"] = {}
-
+                item["mda_sentences"] = []
+                
             try:
                 risk_section_splitted = item["risk_section"].split("\n")
                 dict_of_paragraphs_risk = self.reformat_section(risk_section_splitted)
                 item["risk_paragraphs"] = dict_of_paragraphs_risk
 
+                list_of_sentences = []
+                for _, paragaraph_text in dict_of_paragraphs_risk.items():
+                    list_of_sentences += tokenize.sent_tokenize(paragaraph_text)
+                    
+                item["risk_sentences"] = list_of_sentences
+                
             except Exception as e:
                 print(traceback.format_exc())
                 item["risk_paragraphs"] = {}
+                item["risk_sentences"] = []
 
     def reformat_section(self, section_splitted, threshold_for_paragraph=20):
         """

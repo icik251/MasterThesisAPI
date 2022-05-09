@@ -29,6 +29,7 @@ class FundamentalDataHandler:
             "04-03": q2,
             "03-28": q2,
             "04-04": q2,
+            "04-25": q2,
             "04-27": q2,
             "05-10": q2,
             "07-01": q3,
@@ -37,6 +38,8 @@ class FundamentalDataHandler:
             "07-03": q3,
             "06-27": q3,
             "07-04": q3,
+            "06-11": q3,
+            "08-03": q3,
             "10-02": q4,
             "09-25": q4,
             "10-03": q4,
@@ -674,10 +677,17 @@ class FundamentalDataHandler:
             if create_imputer_for_industry:
                 curr_imputer = KNNImputer(n_neighbors=n_neighbours)
                 list_for_imputation = [i[1] for i in list_for_industry_imputer]
-                if not list_for_imputation:
+                
+                is_imputation_possible = False
+                for list_of_values_curr_company in list_for_imputation:
+                    if None not in list_of_values_curr_company:
+                        is_imputation_possible = True
+                        break
+            
+                if not is_imputation_possible:
                     # If Imputer can't be created
                     yield industry_key, {}
-                    break
+                    continue
 
                 curr_imputer.fit(list_for_imputation)
 

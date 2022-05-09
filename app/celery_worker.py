@@ -263,18 +263,23 @@ def create_stock_prices(curr_company: dict, start_date: str):
         list_prices.append(stock_price_obj.dict(by_alias=True))
 
     # ~252 are the official trading days, we set 240
-    threshold_trading_days = 240
-    if (
-        dict_of_dates_checkers["2017"] < threshold_trading_days
-        or dict_of_dates_checkers["2018"] < threshold_trading_days
-        or dict_of_dates_checkers["2019"] < threshold_trading_days
-        or dict_of_dates_checkers["2020"] < threshold_trading_days
-        or dict_of_dates_checkers["2021"] < threshold_trading_days
-    ):
-        close_mongo_connection(client)
-        return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Not enough data for company, can't create time-series, \
-            2017 days: {dict_of_dates_checkers['2017']} | 2018 days: {dict_of_dates_checkers['2018']} | 2019 days: {dict_of_dates_checkers['2019']} | 2020 days: {dict_of_dates_checkers['2020']} | 2021 days: {dict_of_dates_checkers['2021']}"
+    # threshold_trading_days = 240
+    # if (
+    #     dict_of_dates_checkers["2017"] < threshold_trading_days
+    #     or dict_of_dates_checkers["2018"] < threshold_trading_days
+    #     or dict_of_dates_checkers["2019"] < threshold_trading_days
+    #     or dict_of_dates_checkers["2020"] < threshold_trading_days
+    #     or dict_of_dates_checkers["2021"] < threshold_trading_days
+    # ):
+    #     close_mongo_connection(client)
+    #     return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Not enough data for company, can't create time-series, \
+    #         2017 days: {dict_of_dates_checkers['2017']} | 2018 days: {dict_of_dates_checkers['2018']} | 2019 days: {dict_of_dates_checkers['2019']} | 2020 days: {dict_of_dates_checkers['2020']} | 2021 days: {dict_of_dates_checkers['2021']}"
     # delete old time-series if exists for company
+
+    if not list_prices:
+        close_mongo_connection(client)
+        return f"{curr_company.get('cik')} ticker is {curr_company.get('ticker')} | Not enough data for company, can't create time-series"
+
     delete_stock_prices(db, curr_company["cik"], "adj_close", stock_price_collection)
     # add new stock prices
     add_stock_prices(db, list_prices, stock_price_collection)
@@ -410,7 +415,9 @@ def create_model_input_data(
                 percentage_change=dict_input["percentage_change"],
                 k_fold_config=dict_input["k_fold_config"],
                 mda_paragraphs=dict_input["mda_paragraphs"],
+                mda_sentences=dict_input["mda_sentences"],
                 risk_paragraphs=dict_input["risk_paragraphs"],
+                risk_sentences=dict_input["risk_sentences"],
                 fundamental_data=dict_input["fundamental_data"],
                 fundamental_data_imputed_past=dict_input[
                     "fundamental_data_imputed_past"
@@ -481,9 +488,7 @@ def create_scaled_data_test_set():
         input_data_collection=input_data_collection,
     )
 
-    list_of_train_perc_change = [
-        x["percentage_change"] for x in list_of_train_input
-    ]
+    list_of_train_perc_change = [x["percentage_change"] for x in list_of_train_input]
     list_of_test_perc_change = [x["percentage_change"] for x in list_of_test_input]
 
     scaler_min_max = MinMaxScaler()
@@ -540,7 +545,9 @@ def create_scaled_data_test_set():
     ):
         curr_id = list_of_test_input[idx]["_id"]
         curr_dict_min_max = list_of_test_input[idx]["percentage_change_scaled_min_max"]
-        curr_dict_standard = list_of_test_input[idx]["percentage_change_scaled_standard"]
+        curr_dict_standard = list_of_test_input[idx][
+            "percentage_change_scaled_standard"
+        ]
 
         curr_dict_min_max["full"] = min_max_scaled[0]
         curr_dict_standard["full"] = standard_scaled[0]

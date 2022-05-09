@@ -31,3 +31,13 @@ def quarter_exist(company_db: dict, company_new: dict):
             return True
 
     return False
+
+def verify_fundamental_data_features(curr_features_dict):
+    size, zeros = True, True
+    if len(curr_features_dict) != 19:
+        size = False
+    # means we have only 0
+    if len(set(list(curr_features_dict.values()))) == 1:
+       zeros = False
+    
+    return size, zeros
