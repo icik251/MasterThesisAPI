@@ -61,15 +61,15 @@ def get_input_data_by_kfold_split_type(
     db: MongoClient,
     k_fold,
     split_type,
-    exclude_without_label=True,
+    is_used=True,
     use_pydantic=False,
     input_data_collection: str = settings.INPUT_DATA_COLLECTION,
 ):
     input_data_list = []
 
     query = (
-        {f"k_fold_config.{k_fold}": split_type, "label": {"$ne": None}}
-        if exclude_without_label
+        {f"k_fold_config.{k_fold}": split_type, "is_used": True}
+        if is_used
         else {f"k_fold_config.{k_fold}": split_type}
     )
 

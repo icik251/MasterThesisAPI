@@ -5,6 +5,7 @@ import json
 import traceback
 
 from bson.objectid import ObjectId
+from sklearn.model_selection import KFold
 
 from services import (
     process_filing,
@@ -473,12 +474,6 @@ def create_scaled_data_test_set():
         input_data_collection=input_data_collection,
     )
 
-    list_of_train_input = get_input_data_by_kfold_split_type(
-        db=db,
-        k_fold=1,
-        split_type="train",
-        input_data_collection=input_data_collection,
-    )
     list_of_train_input = list_of_val_input + list_of_train_input
 
     list_of_test_input = get_input_data_by_kfold_split_type(
@@ -919,7 +914,7 @@ def feature_enginnering(cik: int):
 
 
 @celery_app.task(name="k_folds_config", base=BaseTaskWithRetry)
-def create_k_folds(k_folds_rules: dict):
+def create_k_folds(k_folds: int):
     client = None
     while not client:
         client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
@@ -931,17 +926,49 @@ def create_k_folds(k_folds_rules: dict):
     list_of_input_data = get_all_input_data(
         db=db, is_used=True, input_data_collection=input_data_collection
     )
-    k_folds = [1, 2, 3]
-    for input_data in list_of_input_data:
-        k_fold_config = {}
-        for k in k_folds:
-            split_type = k_folds_rules[str(input_data["year"])][str(k)]
-            k_fold_config[str(k)] = split_type
 
+    list_of_input_data_train_val_corpus = []
+    list_of_input_data_test_corpus = []
+    for input_data in list_of_input_data:
+        if input_data["year"] != 2021:
+            list_of_input_data_train_val_corpus.append(input_data)
+        else:
+            list_of_input_data_test_corpus.append(input_data)
+
+    # Create k_folds for train val
+    k_fold_obj = KFold(k_folds, random_state=42, shuffle=True)
+    # group_k_fold.get_n_splits(list_of_input_data_train_val_corpus)
+
+    for k_fold_idx, (train_index, val_index) in enumerate(
+        k_fold_obj.split(list_of_input_data_train_val_corpus)
+    ):
+        for idx in train_index:
+            list_of_input_data_train_val_corpus[idx]["k_fold_config"][
+                str(k_fold_idx + 1)
+            ] = "train"
+        for idx in val_index:
+            list_of_input_data_train_val_corpus[idx]["k_fold_config"][
+                str(k_fold_idx + 1)
+            ] = "val"
+
+    list_test_keys = list(range(1, k_folds + 1))
+    list_test_keys = [str(k) for k in list_test_keys]
+    k_fold_config_test = dict(zip(list_test_keys, ["test"] * k_folds))
+
+    # Update for test
+    for input_data in list_of_input_data_test_corpus:
         update_input_data_by_id(
             db=db,
             _id=input_data["_id"],
-            dict_of_new_field={"k_fold_config": k_fold_config},
+            dict_of_new_field={"k_fold_config": k_fold_config_test},
+            input_data_collection=input_data_collection,
+        )
+
+    for input_data in list_of_input_data_train_val_corpus:
+        update_input_data_by_id(
+            db=db,
+            _id=input_data["_id"],
+            dict_of_new_field={"k_fold_config": input_data["k_fold_config"]},
             input_data_collection=input_data_collection,
         )
 

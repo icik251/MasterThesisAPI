@@ -105,10 +105,10 @@ async def scale_data_test():
     return ResponseModel([], "Task added to queue.")
 
 
-@router.post("/k_folds/", response_description="Create k_folds by given config")
+@router.post("/k_folds/", response_description="Create k_folds by num of k-folds")
 async def k_folds_creation(k_folds_post: KFolds = Body(...)):
     k_folds_dict = k_folds_post.dict()
-    create_k_folds.delay(k_folds_dict["k_folds_rules"])
+    create_k_folds.delay(k_folds_dict["k_folds"])
     return ResponseModel([], "Task added to queue.")
 
 
