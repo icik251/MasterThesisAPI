@@ -49,7 +49,7 @@ import os
 
 import numpy as np
 import pickle
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import RobustScaler, StandardScaler, MinMaxScaler
 
 load_dotenv("../.env")
 celery_app = celery.Celery(
@@ -488,16 +488,21 @@ def create_scaled_data_test_set():
 
     scaler_min_max = MinMaxScaler()
     scaler_standard = StandardScaler()
+    scaler_robust = RobustScaler()
 
     # Fit for both scalers
     scaler_min_max.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
     scaler_standard.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
+    scaler_robust.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
 
     # Transform for both scalers
     list_of_train_perc_change_scaled_min_max = scaler_min_max.transform(
         np.array(list_of_train_perc_change).reshape(-1, 1)
     )
     list_of_train_perc_change_scaled_standard = scaler_standard.transform(
+        np.array(list_of_train_perc_change).reshape(-1, 1)
+    )
+    list_of_train_perc_change_scaled_robust = scaler_robust.transform(
         np.array(list_of_train_perc_change).reshape(-1, 1)
     )
 
@@ -507,12 +512,16 @@ def create_scaled_data_test_set():
     list_of_test_perc_change_scaled_standard = scaler_standard.transform(
         np.array(list_of_test_perc_change).reshape(-1, 1)
     )
+    list_of_test_perc_change_scaled_robust = scaler_robust.transform(
+        np.array(list_of_test_perc_change).reshape(-1, 1)
+    )
 
     # For training
-    for idx, (min_max_scaled, standard_scaled) in enumerate(
+    for idx, (min_max_scaled, standard_scaled, robust_scaled) in enumerate(
         zip(
             list_of_train_perc_change_scaled_min_max,
             list_of_train_perc_change_scaled_standard,
+            list_of_train_perc_change_scaled_robust
         )
     ):
         curr_id = list_of_train_input[idx]["_id"]
@@ -520,22 +529,28 @@ def create_scaled_data_test_set():
         curr_dict_standard = list_of_train_input[idx][
             "percentage_change_scaled_standard"
         ]
+        curr_dict_robust = list_of_train_input[idx][
+            "percentage_change_scaled_robust"
+        ]
 
         curr_dict_min_max["full"] = min_max_scaled[0]
         curr_dict_standard["full"] = standard_scaled[0]
+        curr_dict_robust["full"] = robust_scaled[0]
         update_query = {
             "percentage_change_scaled_min_max": curr_dict_min_max,
             "percentage_change_scaled_standard": curr_dict_standard,
+            "percentage_change_scaled_robust": curr_dict_robust
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
         )
 
     # For testing
-    for idx, (min_max_scaled, standard_scaled) in enumerate(
+    for idx, (min_max_scaled, standard_scaled, robust_scaled) in enumerate(
         zip(
             list_of_test_perc_change_scaled_min_max,
             list_of_test_perc_change_scaled_standard,
+            list_of_test_perc_change_scaled_robust
         )
     ):
         curr_id = list_of_test_input[idx]["_id"]
@@ -543,13 +558,18 @@ def create_scaled_data_test_set():
         curr_dict_standard = list_of_test_input[idx][
             "percentage_change_scaled_standard"
         ]
+        curr_dict_robust = list_of_test_input[idx][
+            "percentage_change_scaled_robust"
+        ]
 
         curr_dict_min_max["full"] = min_max_scaled[0]
         curr_dict_standard["full"] = standard_scaled[0]
+        curr_dict_robust["full"] = robust_scaled[0]
 
         update_query = {
             "percentage_change_scaled_min_max": curr_dict_min_max,
             "percentage_change_scaled_standard": curr_dict_standard,
+            "percentage_change_scaled_robust": curr_dict_robust
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
@@ -557,15 +577,21 @@ def create_scaled_data_test_set():
 
     min_max_scaler_pkl = pickle.dumps(scaler_min_max)
     standard_scaler_pkl = pickle.dumps(scaler_standard)
+    robust_scaler_pkl = pickle.dumps(scaler_robust)
+    
     storage_min_max = Storage(
         dumped_object=min_max_scaler_pkl, name="min_max", k_fold="full"
     )
     storage_standard = Storage(
         dumped_object=standard_scaler_pkl, name="standard", k_fold="full"
     )
+    storage_robust = Storage(
+        dumped_object=robust_scaler_pkl, name="robust", k_fold="full"
+    )
 
     db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
     db[storage_collection].insert_one(storage_standard.dict(by_alias=True))
+    db[storage_collection].insert_one(storage_robust.dict(by_alias=True))
 
     close_mongo_connection(client)
     return f"Success for k-fold full | Scalers saved and data updated"
@@ -601,16 +627,21 @@ def create_scaled_data(k_fold: int):
 
     scaler_min_max = MinMaxScaler()
     scaler_standard = StandardScaler()
+    scaler_robust = RobustScaler()
 
-    # Fit for both scalers
+    # Fit for ALL scalers
     scaler_min_max.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
     scaler_standard.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
+    scaler_robust.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
 
-    # Transform for both scalers
+    # Transform for ALL scalers
     list_of_train_perc_change_scaled_min_max = scaler_min_max.transform(
         np.array(list_of_train_perc_change).reshape(-1, 1)
     )
     list_of_train_perc_change_scaled_standard = scaler_standard.transform(
+        np.array(list_of_train_perc_change).reshape(-1, 1)
+    )
+    list_of_train_perc_change_scaled_robust = scaler_robust.transform(
         np.array(list_of_train_perc_change).reshape(-1, 1)
     )
 
@@ -620,12 +651,16 @@ def create_scaled_data(k_fold: int):
     list_of_val_perc_change_scaled_standard = scaler_standard.transform(
         np.array(list_of_val_perc_change).reshape(-1, 1)
     )
+    list_of_val_perc_change_scaled_robust = scaler_robust.transform(
+        np.array(list_of_val_perc_change).reshape(-1, 1)
+    )
 
     # For training
-    for idx, (min_max_scaled, standard_scaled) in enumerate(
+    for idx, (min_max_scaled, standard_scaled, robust_scaled) in enumerate(
         zip(
             list_of_train_perc_change_scaled_min_max,
             list_of_train_perc_change_scaled_standard,
+            list_of_train_perc_change_scaled_robust,
         )
     ):
         curr_id = list_of_train_input[idx]["_id"]
@@ -633,34 +668,41 @@ def create_scaled_data(k_fold: int):
         curr_dict_standard = list_of_train_input[idx][
             "percentage_change_scaled_standard"
         ]
+        curr_dict_robust = list_of_train_input[idx]["percentage_change_scaled_robust"]
 
         curr_dict_min_max[str(k_fold)] = min_max_scaled[0]
         curr_dict_standard[str(k_fold)] = standard_scaled[0]
+        curr_dict_robust[str(k_fold)] = robust_scaled[0]
         update_query = {
             "percentage_change_scaled_min_max": curr_dict_min_max,
             "percentage_change_scaled_standard": curr_dict_standard,
+            "percentage_change_scaled_robust": curr_dict_robust,
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
         )
 
     # For validation
-    for idx, (min_max_scaled, standard_scaled) in enumerate(
+    for idx, (min_max_scaled, standard_scaled, robust_scaled) in enumerate(
         zip(
             list_of_val_perc_change_scaled_min_max,
             list_of_val_perc_change_scaled_standard,
+            list_of_val_perc_change_scaled_robust,
         )
     ):
         curr_id = list_of_val_input[idx]["_id"]
         curr_dict_min_max = list_of_val_input[idx]["percentage_change_scaled_min_max"]
         curr_dict_standard = list_of_val_input[idx]["percentage_change_scaled_standard"]
+        curr_dict_robust = list_of_val_input[idx]["percentage_change_scaled_robust"]
 
         curr_dict_min_max[str(k_fold)] = min_max_scaled[0]
         curr_dict_standard[str(k_fold)] = standard_scaled[0]
+        curr_dict_robust[str(k_fold)] = robust_scaled[0]
 
         update_query = {
             "percentage_change_scaled_min_max": curr_dict_min_max,
             "percentage_change_scaled_standard": curr_dict_standard,
+            "percentage_change_scaled_robust": curr_dict_robust,
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
@@ -668,15 +710,20 @@ def create_scaled_data(k_fold: int):
 
     min_max_scaler_pkl = pickle.dumps(scaler_min_max)
     standard_scaler_pkl = pickle.dumps(scaler_standard)
+    robust_scaler_pkl = pickle.dumps(scaler_robust)
     storage_min_max = Storage(
         dumped_object=min_max_scaler_pkl, name="min_max", k_fold=k_fold
     )
     storage_standard = Storage(
         dumped_object=standard_scaler_pkl, name="standard", k_fold=k_fold
     )
+    storage_robust = Storage(
+        dumped_object=robust_scaler_pkl, name="robust", k_fold=k_fold
+    )
 
     db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
     db[storage_collection].insert_one(storage_standard.dict(by_alias=True))
+    db[storage_collection].insert_one(storage_robust.dict(by_alias=True))
 
     close_mongo_connection(client)
 

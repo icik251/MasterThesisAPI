@@ -31,6 +31,7 @@ class InputData(BaseModel):
     percentage_change: Optional[float] = None
     percentage_change_scaled_min_max: Optional[dict] = {}
     percentage_change_scaled_standard: Optional[dict] = {}
+    percentage_change_scaled_robust: Optional[dict] = {}
     is_used: Optional[bool] = True
     k_fold_config: dict = Field(...)
     mda_paragraphs: Optional[dict] = {}
