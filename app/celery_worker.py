@@ -5,7 +5,7 @@ import json
 import traceback
 
 from bson.objectid import ObjectId
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from services import (
     process_filing,
@@ -26,6 +26,7 @@ from crud.input_data import (
     get_input_data_by_cik,
     get_all_input_data,
 )
+from crud.adapter_data import add_adater_data, get_all_adapter_data, update_adapter_data_by_id
 from crud.fundamental_data import add_fundamental_data, delete_fundamental_data
 
 from databases.mongodb.session import get_database
@@ -521,7 +522,7 @@ def create_scaled_data_test_set():
         zip(
             list_of_train_perc_change_scaled_min_max,
             list_of_train_perc_change_scaled_standard,
-            list_of_train_perc_change_scaled_robust
+            list_of_train_perc_change_scaled_robust,
         )
     ):
         curr_id = list_of_train_input[idx]["_id"]
@@ -529,9 +530,7 @@ def create_scaled_data_test_set():
         curr_dict_standard = list_of_train_input[idx][
             "percentage_change_scaled_standard"
         ]
-        curr_dict_robust = list_of_train_input[idx][
-            "percentage_change_scaled_robust"
-        ]
+        curr_dict_robust = list_of_train_input[idx]["percentage_change_scaled_robust"]
 
         curr_dict_min_max["full"] = min_max_scaled[0]
         curr_dict_standard["full"] = standard_scaled[0]
@@ -539,7 +538,7 @@ def create_scaled_data_test_set():
         update_query = {
             "percentage_change_scaled_min_max": curr_dict_min_max,
             "percentage_change_scaled_standard": curr_dict_standard,
-            "percentage_change_scaled_robust": curr_dict_robust
+            "percentage_change_scaled_robust": curr_dict_robust,
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
@@ -550,7 +549,7 @@ def create_scaled_data_test_set():
         zip(
             list_of_test_perc_change_scaled_min_max,
             list_of_test_perc_change_scaled_standard,
-            list_of_test_perc_change_scaled_robust
+            list_of_test_perc_change_scaled_robust,
         )
     ):
         curr_id = list_of_test_input[idx]["_id"]
@@ -558,9 +557,7 @@ def create_scaled_data_test_set():
         curr_dict_standard = list_of_test_input[idx][
             "percentage_change_scaled_standard"
         ]
-        curr_dict_robust = list_of_test_input[idx][
-            "percentage_change_scaled_robust"
-        ]
+        curr_dict_robust = list_of_test_input[idx]["percentage_change_scaled_robust"]
 
         curr_dict_min_max["full"] = min_max_scaled[0]
         curr_dict_standard["full"] = standard_scaled[0]
@@ -569,7 +566,7 @@ def create_scaled_data_test_set():
         update_query = {
             "percentage_change_scaled_min_max": curr_dict_min_max,
             "percentage_change_scaled_standard": curr_dict_standard,
-            "percentage_change_scaled_robust": curr_dict_robust
+            "percentage_change_scaled_robust": curr_dict_robust,
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
@@ -578,7 +575,7 @@ def create_scaled_data_test_set():
     min_max_scaler_pkl = pickle.dumps(scaler_min_max)
     standard_scaler_pkl = pickle.dumps(scaler_standard)
     robust_scaler_pkl = pickle.dumps(scaler_robust)
-    
+
     storage_min_max = Storage(
         dumped_object=min_max_scaler_pkl, name="min_max", k_fold="full"
     )
@@ -1021,3 +1018,61 @@ def create_k_folds(k_folds: int):
 
     close_mongo_connection(client)
     return f"Successfuly creation of k_folds"
+
+
+@celery_app.task(name="k_folds_config_adapter", base=BaseTaskWithRetry)
+def create_k_folds_adapter(k_folds: int):
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    adapter_data_collection = os.getenv("ADAPTER_DATA_COLLECTION")
+
+    list_of_adapter_data = get_all_adapter_data(
+        db=db, adapter_data_collection=adapter_data_collection
+    )
+    list_of_adapter_y = [x['label'] for x in list_of_adapter_data]
+
+    # Create k_folds for train val
+    k_fold_obj = StratifiedKFold(k_folds, random_state=42, shuffle=True)
+
+    for k_fold_idx, (train_index, val_index) in enumerate(
+        k_fold_obj.split(list_of_adapter_data, list_of_adapter_y)
+    ):
+        for idx in train_index:
+            list_of_adapter_data[idx]["k_fold_config"][
+                str(k_fold_idx + 1)
+            ] = "train"
+        for idx in val_index:
+            list_of_adapter_data[idx]["k_fold_config"][
+                str(k_fold_idx + 1)
+            ] = "val"
+
+    for adapter_data in list_of_adapter_data:
+        update_adapter_data_by_id(
+            db=db,
+            _id=adapter_data["_id"],
+            dict_of_new_field={"k_fold_config": adapter_data["k_fold_config"]},
+            adapter_data_collection=adapter_data_collection,
+        )
+
+    close_mongo_connection(client)
+    return f"Successfuly creation of k_folds for Adapter"
+
+
+@celery_app.task(name="create_adapter_data", base=BaseTaskWithRetry)
+def create_adapter_data(adater_data: dict):
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    adapter_data_collection = os.getenv("ADAPTER_DATA_COLLECTION")
+    
+    add_adater_data(db, adater_data, adapter_data_collection)
+    
+    close_mongo_connection(client)
+    return f"Successfully added adapter data sample"

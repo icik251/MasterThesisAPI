@@ -16,16 +16,15 @@ def add_input_data(
     new_input_data = db[input_data_collection].find_one({"_id": input_data.inserted_id})
     return new_input_data
 
-def get_all_input_data(db: MongoClient,
-                       is_used=True,
-                        use_pydantic=False,
-                        input_data_collection: str = settings.INPUT_DATA_COLLECTION):
-    
-    query = (
-        {"is_used": True}
-        if is_used
-        else {}
-    )
+
+def get_all_input_data(
+    db: MongoClient,
+    is_used=True,
+    use_pydantic=False,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+
+    query = {"is_used": True} if is_used else {}
 
     input_data_list = []
     for input_data_dict in db[input_data_collection].find(query):
@@ -36,26 +35,24 @@ def get_all_input_data(db: MongoClient,
 
     return input_data_list
 
-async def async_get_all_input_data(db: AsyncIOMotorClient,
-                       is_used=True,
-                        use_pydantic=False,
-                        input_data_collection: str = settings.INPUT_DATA_COLLECTION):
-    
-    query = (
-        {"is_used": True}
-        if is_used
-        else {}
-    )
+
+async def async_get_all_input_data(
+    db: AsyncIOMotorClient,
+    is_used=True,
+    use_pydantic=False,
+    input_data_collection: str = settings.INPUT_DATA_COLLECTION,
+):
+
+    query = {"is_used": True} if is_used else {}
     list_of_input_data = []
     async for input_data_dict in db[input_data_collection].find(query):
         if use_pydantic:
             list_of_input_data.append(model_input_data.InputData(**input_data_dict))
         else:
             list_of_input_data.append(input_data_dict)
-            
+
     return list_of_input_data
 
-    
 
 def get_input_data_by_kfold_split_type(
     db: MongoClient,
@@ -93,9 +90,7 @@ def get_input_data_by_year_q(
     input_data_list = []
 
     query = (
-        {"year": year, "q": q, "is_used": True}
-        if is_used
-        else {"year": year, "q": q}
+        {"year": year, "q": q, "is_used": True} if is_used else {"year": year, "q": q}
     )
 
     for input_data_dict in db[input_data_collection].find(query):
@@ -118,9 +113,7 @@ async def get_input_data_by_year_q_async(
     input_data_list = []
 
     query = (
-        {"year": year, "q": q, "is_used": True}
-        if is_used
-        else {"year": year, "q": q}
+        {"year": year, "q": q, "is_used": True} if is_used else {"year": year, "q": q}
     )
 
     async for input_data_dict in db[input_data_collection].find(query):
@@ -142,7 +135,8 @@ def update_input_data_by_id(
     db[input_data_collection].update_one(
         {"_id": _id}, {"$set": dict_of_new_field}, upsert=upsert
     )
-    
+
+
 async def async_update_input_data_by_id(
     db: AsyncIOMotorClient,
     _id: ObjectId,
@@ -154,7 +148,8 @@ async def async_update_input_data_by_id(
         {"_id": _id}, {"$set": dict_of_new_field}, upsert=upsert
     )
     return 1
-    
+
+
 def get_input_data_by_cik(
     db: MongoClient,
     cik: int,
@@ -162,11 +157,7 @@ def get_input_data_by_cik(
     use_pydantic=False,
     input_data_collection: str = settings.INPUT_DATA_COLLECTION,
 ):
-    query = (
-        {"cik": cik, "is_used": True}
-        if is_used
-        else {"cik": cik}
-    )
+    query = {"cik": cik, "is_used": True} if is_used else {"cik": cik}
 
     input_data_list = []
     for input_data_dict in db[input_data_collection].find(query):
@@ -203,6 +194,7 @@ async def update_many_input_data_by_year_q(
     )
 
     return 1
+
 
 async def update_many_input_data_by_cik(
     db: AsyncIOMotorClient,

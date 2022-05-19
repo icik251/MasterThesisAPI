@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     COMPANY_BASE_COLLECTION: str = os.getenv("COMPANY_BASE_COLLECTION")
     STOCK_PRICE_COLLECTION: str = os.getenv("STOCK_PRICE_COLLECTION")
     INPUT_DATA_COLLECTION: str = os.getenv("INPUT_DATA_COLLECTION")
+    ADAPTER_DATA_COLLECTION: str  = os.getenv("ADAPTER_DATA_COLLECTION")
     STORAGE_COLLECTION: str = os.getenv("STORAGE_COLLECTION")
+    
 
     AV_API_KEY: str = os.getenv("AV_API_KEY")
 
