@@ -937,7 +937,7 @@ def feature_enginnering(cik: int):
         else:
             input_data_t = list_of_cik_input_data[idx]
             input_data_t_1 = list_of_cik_input_data[idx - 1]
-            input_data_t_2 = list_of_cik_input_data[idx - 1]
+            input_data_t_2 = list_of_cik_input_data[idx - 2]
 
         list_of_res_dicts = (
             fundamental_data_handler_obj.calculate_difference_for_company_for_timestamp(
