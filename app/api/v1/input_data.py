@@ -165,7 +165,7 @@ async def update_input_is_used(
                 )
                 if not not_size or not not_zeros:
                     if str(input_data["_id"]) not in dict_of_lists.keys():
-                        async_update_input_data_by_id(
+                        await async_update_input_data_by_id(
                             db, input_data["_id"], updated_is_used_input_data.dict()
                         )
 
@@ -175,7 +175,7 @@ async def update_input_is_used(
             if (not input_data["label"] or not input_data["percentage_change"]) and str(
                 input_data["_id"]
             ) not in dict_of_lists.keys():
-                async_update_input_data_by_id(
+                await async_update_input_data_by_id(
                     db, input_data["_id"], updated_is_used_input_data.dict()
                 )
 

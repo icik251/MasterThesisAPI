@@ -625,7 +625,7 @@ def create_scaled_data(k_fold: int):
     scaler_min_max = MinMaxScaler()
     scaler_standard = StandardScaler()
     scaler_robust = RobustScaler()
-
+    
     # Fit for ALL scalers
     scaler_min_max.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
     scaler_standard.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
@@ -725,6 +725,9 @@ def create_scaled_data(k_fold: int):
     close_mongo_connection(client)
 
     return f"Success for k-fold {k_fold} | Scalers saved and data updated"
+
+
+
 
 
 @celery_app.task(name="create_fundamental_data", base=BaseTaskWithRetry)
