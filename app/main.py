@@ -17,4 +17,3 @@ app.add_event_handler("shutdown", close_mongo_connection_async)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="localhost", port=8000, reload=False)
-    

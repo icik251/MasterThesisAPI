@@ -26,7 +26,11 @@ from crud.input_data import (
     get_input_data_by_cik,
     get_all_input_data,
 )
-from crud.adapter_data import add_adater_data, get_all_adapter_data, update_adapter_data_by_id
+from crud.adapter_data import (
+    add_adater_data,
+    get_all_adapter_data,
+    update_adapter_data_by_id,
+)
 from crud.fundamental_data import add_fundamental_data, delete_fundamental_data
 
 from databases.mongodb.session import get_database
@@ -625,7 +629,7 @@ def create_scaled_data(k_fold: int):
     scaler_min_max = MinMaxScaler()
     scaler_standard = StandardScaler()
     scaler_robust = RobustScaler()
-    
+
     # Fit for ALL scalers
     scaler_min_max.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
     scaler_standard.fit(np.array(list_of_train_perc_change).reshape(-1, 1))
@@ -727,7 +731,169 @@ def create_scaled_data(k_fold: int):
     return f"Success for k-fold {k_fold} | Scalers saved and data updated"
 
 
+@celery_app.task(name="create_scaled_data_features", base=BaseTaskWithRetry)
+def create_scaled_data_features(
+    k_fold: int,
+    list_of_features_to_scale: list,
+):
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
 
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    storage_collection = os.getenv("STORAGE_COLLECTION")
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+
+    list_of_train_input = get_input_data_by_kfold_split_type(
+        db=db,
+        k_fold=k_fold,
+        split_type="train",
+        input_data_collection=input_data_collection,
+    )
+
+    list_of_val_input = get_input_data_by_kfold_split_type(
+        db=db,
+        k_fold=k_fold,
+        split_type="val",
+        input_data_collection=input_data_collection,
+    )
+
+    # Grab initially the keys
+    list_of_keys = list(list_of_train_input[0][list_of_features_to_scale[0]].keys())
+
+    # Add everything for training
+    list_of_train_features = []
+    for sample in list_of_train_input:
+        curr_sample_features = []
+        for feature_key in list_of_features_to_scale:
+            for kpi_key in list_of_keys:
+                curr_sample_features.append(sample[feature_key][kpi_key])
+
+        list_of_train_features.append(curr_sample_features)
+
+    # Add everything for validation
+    list_of_val_features = []
+    for sample in list_of_val_input:
+        curr_sample_features = []
+        for feature_key in list_of_features_to_scale:
+            for kpi_key in list_of_keys:
+                curr_sample_features.append(sample[feature_key][kpi_key])
+
+        list_of_val_features.append(curr_sample_features)
+
+    scaler_min_max = MinMaxScaler()
+    scaler_standard = StandardScaler()
+    scaler_robust = RobustScaler()
+
+    # Fit for ALL scalers
+    scaler_min_max.fit(np.array(list_of_train_features))
+    scaler_standard.fit(np.array(list_of_train_features))
+    scaler_robust.fit(np.array(list_of_train_features))
+
+    # Transform for ALL scalers
+    list_of_train_features_scaled_min_max = scaler_min_max.transform(
+        np.array(list_of_train_features)
+    )
+    list_of_train_features_scaled_standard = scaler_standard.transform(
+        np.array(list_of_train_features)
+    )
+    list_of_train_features_scaled_robust = scaler_robust.transform(
+        np.array(list_of_train_features)
+    )
+
+    list_of_val_features_scaled_min_max = scaler_min_max.transform(
+        np.array(list_of_val_features)
+    )
+    list_of_val_features_scaled_standard = scaler_standard.transform(
+        np.array(list_of_val_features)
+    )
+    list_of_val_features_scaled_robust = scaler_robust.transform(
+        np.array(list_of_val_features)
+    )
+
+    # For training
+    for idx, (min_max_scaled, standard_scaled, robust_scaled) in enumerate(
+        zip(
+            list_of_train_features_scaled_min_max,
+            list_of_train_features_scaled_standard,
+            list_of_train_features_scaled_robust,
+        )
+    ):
+        curr_id = list_of_train_input[idx]["_id"]
+        curr_dict_min_max = list_of_train_input[idx].get("features_scaled_min_max", {})
+        curr_dict_standard = list_of_train_input[idx].get(
+            "features_scaled_standard", {}
+        )
+        curr_dict_robust = list_of_train_input[idx].get("features_scaled_robust", {})
+
+        curr_dict_min_max[str(k_fold)] = min_max_scaled.tolist()
+        curr_dict_standard[str(k_fold)] = standard_scaled.tolist()
+        curr_dict_robust[str(k_fold)] = robust_scaled.tolist()
+        update_query = {
+            "features_scaled_min_max": curr_dict_min_max,
+            "features_scaled_standard": curr_dict_standard,
+            "features_scaled_robust": curr_dict_robust,
+        }
+        db[input_data_collection].update_one(
+            {"_id": curr_id}, {"$set": update_query}, upsert=True
+        )
+
+    # For validation
+    for idx, (min_max_scaled, standard_scaled, robust_scaled) in enumerate(
+        zip(
+            list_of_val_features_scaled_min_max,
+            list_of_val_features_scaled_standard,
+            list_of_val_features_scaled_robust,
+        )
+    ):
+        curr_id = list_of_val_input[idx]["_id"]
+        curr_dict_min_max = list_of_val_input[idx].get("features_scaled_min_max", {})
+        curr_dict_standard = list_of_val_input[idx].get("features_scaled_standard", {})
+        curr_dict_robust = list_of_val_input[idx].get("features_scaled_robust", {})
+
+        curr_dict_min_max[str(k_fold)] = min_max_scaled.tolist()
+        curr_dict_standard[str(k_fold)] = standard_scaled.tolist()
+        curr_dict_robust[str(k_fold)] = robust_scaled.tolist()
+
+        update_query = {
+            "features_scaled_min_max": curr_dict_min_max,
+            "features_scaled_standard": curr_dict_standard,
+            "features_scaled_robust": curr_dict_robust,
+        }
+        db[input_data_collection].update_one(
+            {"_id": curr_id}, {"$set": update_query}, upsert=True
+        )
+
+    min_max_scaler_pkl = pickle.dumps(scaler_min_max)
+    standard_scaler_pkl = pickle.dumps(scaler_standard)
+    robust_scaler_pkl = pickle.dumps(scaler_robust)
+    storage_min_max = Storage(
+        dumped_object=min_max_scaler_pkl, name="features_min_max", k_fold=k_fold
+    )
+    storage_standard = Storage(
+        dumped_object=standard_scaler_pkl, name="features_standard", k_fold=k_fold
+    )
+    storage_robust = Storage(
+        dumped_object=robust_scaler_pkl, name="features_robust", k_fold=k_fold
+    )
+
+    db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
+    db[storage_collection].insert_one(storage_standard.dict(by_alias=True))
+    db[storage_collection].insert_one(storage_robust.dict(by_alias=True))
+
+    close_mongo_connection(client)
+
+    return f"Success for k-fold {k_fold} for features {list_of_features_to_scale} | Scalers saved and data updated"
+
+
+@celery_app.task(name="create_scaled_data_features_test_set", base=BaseTaskWithRetry)
+def create_scaled_data_features_test_set(
+    k_fold: int,
+    list_of_features_to_scale: list,
+):
+    pass
 
 
 @celery_app.task(name="create_fundamental_data", base=BaseTaskWithRetry)
@@ -1036,7 +1202,7 @@ def create_k_folds_adapter(k_folds: int):
     list_of_adapter_data = get_all_adapter_data(
         db=db, adapter_data_collection=adapter_data_collection
     )
-    list_of_adapter_y = [x['label'] for x in list_of_adapter_data]
+    list_of_adapter_y = [x["label"] for x in list_of_adapter_data]
 
     # Create k_folds for train val
     k_fold_obj = StratifiedKFold(k_folds, random_state=42, shuffle=True)
@@ -1045,13 +1211,9 @@ def create_k_folds_adapter(k_folds: int):
         k_fold_obj.split(list_of_adapter_data, list_of_adapter_y)
     ):
         for idx in train_index:
-            list_of_adapter_data[idx]["k_fold_config"][
-                str(k_fold_idx + 1)
-            ] = "train"
+            list_of_adapter_data[idx]["k_fold_config"][str(k_fold_idx + 1)] = "train"
         for idx in val_index:
-            list_of_adapter_data[idx]["k_fold_config"][
-                str(k_fold_idx + 1)
-            ] = "val"
+            list_of_adapter_data[idx]["k_fold_config"][str(k_fold_idx + 1)] = "val"
 
     for adapter_data in list_of_adapter_data:
         update_adapter_data_by_id(
@@ -1074,8 +1236,8 @@ def create_adapter_data(adater_data: dict):
 
     db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
     adapter_data_collection = os.getenv("ADAPTER_DATA_COLLECTION")
-    
+
     add_adater_data(db, adater_data, adapter_data_collection)
-    
+
     close_mongo_connection(client)
     return f"Successfully added adapter data sample"

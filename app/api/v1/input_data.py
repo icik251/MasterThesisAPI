@@ -31,6 +31,8 @@ from celery_worker import (
     create_scaled_data,
     create_k_folds,
     create_scaled_data_test_set,
+    create_scaled_data_features,
+    create_scaled_data_features_test_set
 )
 
 router = APIRouter()
@@ -102,6 +104,15 @@ async def scale_data(scaler_post: Scaler = Body(...)):
 )
 async def scale_data_test():
     create_scaled_data_test_set.delay()
+    return ResponseModel([], "Task added to queue.")
+
+
+@router.post(
+    "/scaling_features/", response_description="Scale features data from a certain k-fold"
+)
+async def scale_data(scaler_post: Scaler = Body(...)):
+    scaled_dict = scaler_post.dict()
+    create_scaled_data_features.delay(scaled_dict["k_fold"], scaled_dict["list_of_features_to_scale"])
     return ResponseModel([], "Task added to queue.")
 
 
