@@ -12,6 +12,7 @@ class Scaler(BaseModel):
         "fundamental_data_diff_industry_t_1",
         "fundamental_data_diff_industry_t_2",
     ]
+    features_name: str = Field(...)
 
     class Config:
         schema_extra = {
@@ -24,5 +25,6 @@ class Scaler(BaseModel):
                     "fundamental_data_diff_industry_t_1",
                     "fundamental_data_diff_industry_t_2",
                 ],
+                "features_name": "engineered"
             }
         }

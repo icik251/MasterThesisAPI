@@ -735,6 +735,7 @@ def create_scaled_data(k_fold: int):
 def create_scaled_data_features(
     k_fold: int,
     list_of_features_to_scale: list,
+    features_name: str
 ):
     # connect to DB
     client = None
@@ -769,7 +770,11 @@ def create_scaled_data_features(
         curr_sample_features = []
         for feature_key in list_of_features_to_scale:
             for kpi_key in list_of_keys:
-                curr_sample_features.append(sample[feature_key][kpi_key])
+                curr_feature_val = sample[feature_key][kpi_key]
+                if isinstance(curr_feature_val, float) or isinstance(curr_feature_val, int):
+                    curr_sample_features.append(curr_feature_val)
+                elif isinstance(curr_feature_val, dict):
+                    curr_sample_features.append(curr_feature_val["median"])
 
         list_of_train_features.append(curr_sample_features)
 
@@ -779,8 +784,12 @@ def create_scaled_data_features(
         curr_sample_features = []
         for feature_key in list_of_features_to_scale:
             for kpi_key in list_of_keys:
-                curr_sample_features.append(sample[feature_key][kpi_key])
-
+                curr_feature_val = sample[feature_key][kpi_key]
+                if isinstance(curr_feature_val, float) or isinstance(curr_feature_val, int):
+                    curr_sample_features.append(curr_feature_val)
+                elif isinstance(curr_feature_val, dict):
+                    curr_sample_features.append(curr_feature_val["median"])
+                
         list_of_val_features.append(curr_sample_features)
 
     scaler_min_max = MinMaxScaler()
@@ -822,19 +831,19 @@ def create_scaled_data_features(
         )
     ):
         curr_id = list_of_train_input[idx]["_id"]
-        curr_dict_min_max = list_of_train_input[idx].get("features_scaled_min_max", {})
+        curr_dict_min_max = list_of_train_input[idx].get(f"{features_name}_features_scaled_min_max", {})
         curr_dict_standard = list_of_train_input[idx].get(
-            "features_scaled_standard", {}
+            f"{features_name}_features_scaled_standard", {}
         )
-        curr_dict_robust = list_of_train_input[idx].get("features_scaled_robust", {})
+        curr_dict_robust = list_of_train_input[idx].get(f"{features_name}_features_scaled_robust", {})
 
         curr_dict_min_max[str(k_fold)] = min_max_scaled.tolist()
         curr_dict_standard[str(k_fold)] = standard_scaled.tolist()
         curr_dict_robust[str(k_fold)] = robust_scaled.tolist()
         update_query = {
-            "features_scaled_min_max": curr_dict_min_max,
-            "features_scaled_standard": curr_dict_standard,
-            "features_scaled_robust": curr_dict_robust,
+            f"{features_name}_features_scaled_min_max": curr_dict_min_max,
+            f"{features_name}_features_scaled_standard": curr_dict_standard,
+            f"{features_name}_features_scaled_robust": curr_dict_robust,
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
@@ -849,18 +858,18 @@ def create_scaled_data_features(
         )
     ):
         curr_id = list_of_val_input[idx]["_id"]
-        curr_dict_min_max = list_of_val_input[idx].get("features_scaled_min_max", {})
-        curr_dict_standard = list_of_val_input[idx].get("features_scaled_standard", {})
-        curr_dict_robust = list_of_val_input[idx].get("features_scaled_robust", {})
+        curr_dict_min_max = list_of_val_input[idx].get(f"{features_name}_features_scaled_min_max", {})
+        curr_dict_standard = list_of_val_input[idx].get(f"{features_name}_features_scaled_standard", {})
+        curr_dict_robust = list_of_val_input[idx].get(f"{features_name}_features_scaled_robust", {})
 
         curr_dict_min_max[str(k_fold)] = min_max_scaled.tolist()
         curr_dict_standard[str(k_fold)] = standard_scaled.tolist()
         curr_dict_robust[str(k_fold)] = robust_scaled.tolist()
 
         update_query = {
-            "features_scaled_min_max": curr_dict_min_max,
-            "features_scaled_standard": curr_dict_standard,
-            "features_scaled_robust": curr_dict_robust,
+            f"{features_name}_features_scaled_min_max": curr_dict_min_max,
+            f"{features_name}_features_scaled_standard": curr_dict_standard,
+            f"{features_name}_features_scaled_robust": curr_dict_robust,
         }
         db[input_data_collection].update_one(
             {"_id": curr_id}, {"$set": update_query}, upsert=True
@@ -870,13 +879,13 @@ def create_scaled_data_features(
     standard_scaler_pkl = pickle.dumps(scaler_standard)
     robust_scaler_pkl = pickle.dumps(scaler_robust)
     storage_min_max = Storage(
-        dumped_object=min_max_scaler_pkl, name="features_min_max", k_fold=k_fold
+        dumped_object=min_max_scaler_pkl, name=f"{features_name}_features_min_max", k_fold=k_fold
     )
     storage_standard = Storage(
-        dumped_object=standard_scaler_pkl, name="features_standard", k_fold=k_fold
+        dumped_object=standard_scaler_pkl, name=f"{features_name}_features_standard", k_fold=k_fold
     )
     storage_robust = Storage(
-        dumped_object=robust_scaler_pkl, name="features_robust", k_fold=k_fold
+        dumped_object=robust_scaler_pkl, name=f"{features_name}_features_robust", k_fold=k_fold
     )
 
     db[storage_collection].insert_one(storage_min_max.dict(by_alias=True))
@@ -885,7 +894,7 @@ def create_scaled_data_features(
 
     close_mongo_connection(client)
 
-    return f"Success for k-fold {k_fold} for features {list_of_features_to_scale} | Scalers saved and data updated"
+    return f"Success for k-fold {k_fold} for features {list_of_features_to_scale}, name: {features_name} | Scalers saved and data updated"
 
 
 @celery_app.task(name="create_scaled_data_features_test_set", base=BaseTaskWithRetry)

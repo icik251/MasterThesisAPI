@@ -47,9 +47,6 @@ class InputData(BaseModel):
     fundamental_data_diff_industry_t: Optional[dict] = {}
     fundamental_data_diff_industry_t_1: Optional[dict] = {}
     fundamental_data_diff_industry_t_2: Optional[dict] = {}
-    features_scaled_min_max: Optional[dict] = {}
-    features_scaled_standard: Optional[dict] = {}
-    features_scaled_robust: Optional[dict] = {}
 
     class Config:
         allow_population_by_field_name = True

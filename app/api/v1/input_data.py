@@ -112,7 +112,7 @@ async def scale_data_test():
 )
 async def scale_data(scaler_post: Scaler = Body(...)):
     scaled_dict = scaler_post.dict()
-    create_scaled_data_features.delay(scaled_dict["k_fold"], scaled_dict["list_of_features_to_scale"])
+    create_scaled_data_features.delay(scaled_dict["k_fold"], scaled_dict["list_of_features_to_scale"], scaled_dict["features_name"])
     return ResponseModel([], "Task added to queue.")
 
 
