@@ -23,6 +23,7 @@ from crud.input_data import (
 from schemas.input_data import InputData, ResponseModel, ErrorResponseModel
 from schemas.scaler import Scaler
 from schemas.k_folds import KFolds
+from schemas.adversarial_sentences import AdversarialSentences
 
 from models.input_data import UpdateIsIsedInputData
 
@@ -32,7 +33,8 @@ from celery_worker import (
     create_k_folds,
     create_scaled_data_test_set,
     create_scaled_data_features,
-    create_scaled_data_features_test_set
+    create_scaled_data_features_test_set,
+    create_adversarial_sentences,
 )
 
 router = APIRouter()
@@ -108,11 +110,30 @@ async def scale_data_test():
 
 
 @router.post(
-    "/scaling_features/", response_description="Scale features data from a certain k-fold"
+    "/scaling_features/",
+    response_description="Scale features data from a certain k-fold",
 )
 async def scale_data(scaler_post: Scaler = Body(...)):
     scaled_dict = scaler_post.dict()
-    create_scaled_data_features.delay(scaled_dict["k_fold"], scaled_dict["list_of_features_to_scale"], scaled_dict["features_name"])
+    create_scaled_data_features.delay(
+        scaled_dict["k_fold"],
+        scaled_dict["list_of_features_to_scale"],
+        scaled_dict["features_name"],
+    )
+    return ResponseModel([], "Task added to queue.")
+
+
+@router.post(
+    "/adversarial_sentences/",
+    response_description="Add adversarial sentences to the train/val corpus and also the test set",
+)
+async def adversarial_sentences(
+    adversarial_sentences_post: AdversarialSentences = Body(...),
+):
+    adversarial_sentences_dict = adversarial_sentences_post.dict()
+    create_adversarial_sentences.delay(
+        adversarial_sentences_dict["dict_of_sentiment_sentence"]
+    )
     return ResponseModel([], "Task added to queue.")
 
 

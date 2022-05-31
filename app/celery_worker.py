@@ -3,7 +3,9 @@ from collections import defaultdict
 import copy
 import json
 import traceback
+import random
 
+random.seed(42)
 from bson.objectid import ObjectId
 from sklearn.model_selection import KFold, StratifiedKFold
 
@@ -904,6 +906,90 @@ def create_scaled_data_features_test_set(
 ):
     pass
 
+
+@celery_app.task(name="create_adversarial_sentences", base=BaseTaskWithRetry)
+def create_adversarial_sentences(dict_of_sentiment_sentences: dict):
+    
+    list_of_positive_adv_sentences = []
+    list_of_negative_adv_sentences = []
+    
+    for k, v in dict_of_sentiment_sentences.items():
+        if k == "positive":
+            list_of_positive_adv_sentences.append(v)
+        elif k == "negative":
+            list_of_negative_adv_sentences.append(v)
+    
+    # connect to DB
+    client = None
+    while not client:
+        client = connect_to_mongo(os.getenv("MONGO_DATABASE_URI"))
+        time.sleep(5)
+
+    db = get_database(client, db_name=os.getenv("MONGODB_NAME"))
+    input_data_collection = os.getenv("INPUT_DATA_COLLECTION")
+    
+    list_of_input_data = get_all_input_data(db=db, input_data_collection=input_data_collection)
+    list_of_train_val_corpus = []
+    list_of_test_corpus = []
+    
+    for sample in list_of_input_data:
+        if sample["k_fold_config"]["1"] == "test":
+            list_of_test_corpus.append(sample)
+        else:
+            list_of_train_val_corpus.append(sample)
+            
+    # Process train/val corpus, get 3rd std and add adversarial samples to it.
+    robust_percentage_change_train_val = [item["percentage_change_scaled_robust"]["full"] for item in list_of_train_val_corpus]
+    list_of_train_val_ids = [item["_id"] for item in list_of_train_val_corpus]
+    np_robust_percentage_change_train_val = np.array(robust_percentage_change_train_val)
+    train_mean = np.mean(np_robust_percentage_change_train_val)
+    train_standard_deviation = np.std(np_robust_percentage_change_train_val)
+    train_distance_from_mean = abs(np_robust_percentage_change_train_val - train_mean)
+    max_deviations = 3
+    train_not_outlier = train_distance_from_mean < max_deviations * train_standard_deviation
+    train_no_outliers3 = np_robust_percentage_change_train_val[train_not_outlier]
+    
+    count_adv_samples = 0
+    for item in np_robust_percentage_change_train_val:
+        idx_of_id = robust_percentage_change_train_val.index(item)
+        curr_sample_id = list_of_train_val_ids[idx_of_id]
+        if item not in train_no_outliers3:
+            # add adversarial
+            if item > 0:
+                update_input_data_by_id(db=db, _id=curr_sample_id, dict_of_new_field={"adversarial_samples": list_of_positive_adv_sentences}, input_data_collection=input_data_collection)
+            else:
+                update_input_data_by_id(db=db, _id=curr_sample_id, dict_of_new_field={"adversarial_samples": list_of_negative_adv_sentences}, input_data_collection=input_data_collection)
+            count_adv_samples += 1        
+        else:
+            # add empty string
+            update_input_data_by_id(db=db, _id=curr_sample_id, dict_of_new_field={"adversarial_samples": []}, input_data_collection=input_data_collection)
+            
+    # Process test corpus, get 1st std and add adversarial samples to it.
+    robust_percentage_change_test = [item["percentage_change_scaled_robust"]["full"] for item in list_of_test_corpus]
+    list_of_test_ids = [item["_id"] for item in list_of_test_corpus]
+    np_robust_percentage_change_test = np.array(robust_percentage_change_test)
+    test_mean = np.mean(np_robust_percentage_change_test)
+    test_standard_deviation = np.std(np_robust_percentage_change_test)
+    test_distance_from_mean = abs(np_robust_percentage_change_test - test_mean)
+    max_deviations = 1
+    test_not_outlier = test_distance_from_mean < max_deviations * test_standard_deviation
+    test_no_outliers1 = np_robust_percentage_change_test[test_not_outlier]
+    randomly_sampled_from_test = random.sample(list(test_no_outliers1), count_adv_samples)
+    
+    for item in np_robust_percentage_change_test:
+        idx_of_id = robust_percentage_change_test.index(item)
+        curr_sample_id = list_of_test_ids[idx_of_id]
+        if item in randomly_sampled_from_test:
+            # add adversarial
+            # Reverse pos negative for more confusion
+            if item > 0:
+                update_input_data_by_id(db=db, _id=curr_sample_id, dict_of_new_field={"adversarial_samples": list_of_negative_adv_sentences}, input_data_collection=input_data_collection)
+            else:
+                update_input_data_by_id(db=db, _id=curr_sample_id, dict_of_new_field={"adversarial_samples": list_of_positive_adv_sentences}, input_data_collection=input_data_collection)
+        else:
+            # add empty string
+            update_input_data_by_id(db=db, _id=curr_sample_id, dict_of_new_field={"adversarial_samples": []}, input_data_collection=input_data_collection)
+    
 
 @celery_app.task(name="create_fundamental_data", base=BaseTaskWithRetry)
 def create_fundamental_data(cik: int, ticker: str):
